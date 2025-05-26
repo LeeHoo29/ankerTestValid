@@ -1,0 +1,1855 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>对比查看 - Azure Resource Reader</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f6fa;
+            overflow: hidden;
+        }
+
+        .compare-container {
+            display: flex;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        .header {
+            background: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd8;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            margin: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: #f8f9fa;
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-title {
+            font-weight: 600;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .file-selector {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .file-selector select {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .panel-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .content-area {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            padding: 20px;
+        }
+
+        .html-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: white;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .html-frame.loaded {
+            opacity: 1;
+        }
+
+        .json-content {
+            background: #2d3748;
+            color: #e2e8f0;
+            font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            padding: 0;
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            height: 100%;
+            overflow: auto;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #666;
+            font-size: 16px;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* 炫酷的加载动画 */
+        .loading-spinner {
+            position: relative;
+            width: 60px;
+            height: 60px;
+        }
+
+        .loading-spinner::before,
+        .loading-spinner::after {
+            content: '';
+            position: absolute;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            border-top-color: #667eea;
+            animation: spin 1.5s linear infinite;
+        }
+
+        .loading-spinner::before {
+            width: 60px;
+            height: 60px;
+            top: 0;
+            left: 0;
+        }
+
+        .loading-spinner::after {
+            width: 40px;
+            height: 40px;
+            top: 10px;
+            left: 10px;
+            border-top-color: #764ba2;
+            animation-duration: 1s;
+            animation-direction: reverse;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 加载进度条 */
+        .loading-progress {
+            width: 200px;
+            height: 4px;
+            background: #f0f0f0;
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .loading-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 2px;
+        }
+
+        .loading-progress-indeterminate {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, #667eea, transparent);
+            animation: indeterminate 2s infinite linear;
+        }
+
+        @keyframes indeterminate {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* 骨架屏效果 */
+        .skeleton-loader {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 2s infinite;
+            border-radius: 8px;
+        }
+
+        @keyframes skeleton-loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .loading-text {
+            font-weight: 500;
+            color: #333;
+            margin-top: 15px;
+        }
+
+        .loading-dots::after {
+            content: '';
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+
+        /* 加载状态覆盖层 */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(2px);
+            z-index: 10;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-overlay.hide {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .error {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #dc3545;
+            font-size: 16px;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .resizer {
+            width: 5px;
+            background: #e9ecef;
+            cursor: col-resize;
+            position: relative;
+            transition: background 0.3s ease;
+        }
+
+        .resizer:hover {
+            background: #667eea;
+        }
+
+        .resizer::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 3px;
+            height: 30px;
+            background: #ccc;
+            border-radius: 2px;
+        }
+
+        /* JSON语法高亮 */
+        .json-key { color: #79c0ff; }
+        .json-string { color: #a5d6ff; }
+        .json-number { color: #79c0ff; }
+        .json-boolean { color: #ffab70; }
+        .json-null { color: #ffa657; }
+
+        /* 滚动条样式 */
+        .content-area::-webkit-scrollbar,
+        .json-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .content-area::-webkit-scrollbar-track,
+        .json-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .content-area::-webkit-scrollbar-thumb,
+        .json-content::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        .content-area::-webkit-scrollbar-thumb:hover,
+        .json-content::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* JSON可视化样式 */
+        .json-viewer {
+            background: #1e293b;
+            color: #e2e8f0;
+            font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            height: 100%;
+            overflow: auto;
+            padding: 20px;
+        }
+
+        .json-search-bar {
+            background: #334155;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #e2e8f0;
+            font-size: 14px;
+            width: 200px;
+            margin-bottom: 15px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .json-search-bar:focus {
+            background: #475569;
+            box-shadow: 0 0 0 2px #667eea;
+        }
+
+        .json-search-bar::placeholder {
+            color: #94a3b8;
+        }
+
+        .json-tree {
+            user-select: text;
+        }
+
+        .json-node {
+            margin: 2px 0;
+            position: relative;
+        }
+
+        .json-node.highlight {
+            background: rgba(102, 126, 234, 0.3);
+            border-radius: 4px;
+            animation: highlight-pulse 1s ease;
+        }
+
+        @keyframes highlight-pulse {
+            0%, 100% { background: rgba(102, 126, 234, 0.3); }
+            50% { background: rgba(102, 126, 234, 0.6); }
+        }
+
+        .json-toggle {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            user-select: none;
+            margin-right: 4px;
+            text-align: center;
+            line-height: 16px;
+            border-radius: 3px;
+            transition: all 0.2s ease;
+            color: #94a3b8;
+            font-weight: bold;
+        }
+
+        .json-toggle:hover {
+            background: rgba(148, 163, 184, 0.2);
+            color: #e2e8f0;
+        }
+
+        .json-toggle.collapsed::before {
+            content: '▶';
+            font-size: 10px;
+        }
+
+        .json-toggle.expanded::before {
+            content: '▼';
+            font-size: 10px;
+        }
+
+        .json-toggle.leaf {
+            width: 16px;
+            cursor: default;
+        }
+
+        .json-toggle.leaf::before {
+            content: '•';
+            color: #64748b;
+            font-size: 8px;
+        }
+
+        .json-toggle.array-item::before {
+            content: '‣';
+            color: #a78bfa;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .json-toggle.array-item:hover::before {
+            color: #c4b5fd;
+        }
+
+        .json-key {
+            color: #79c0ff;
+            font-weight: 600;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .json-key:hover {
+            color: #a5d6ff;
+            text-decoration: underline;
+        }
+
+        .json-key::after {
+            content: ':';
+            color: #e2e8f0;
+            margin-right: 6px;
+        }
+
+        .json-string {
+            color: #a5d6ff;
+        }
+
+        .json-number {
+            color: #79c0ff;
+            font-weight: 500;
+        }
+
+        .json-boolean {
+            color: #ffab70;
+            font-weight: 600;
+        }
+
+        .json-null {
+            color: #ffa657;
+            font-style: italic;
+        }
+
+        .json-bracket {
+            color: #e2e8f0;
+            font-weight: bold;
+        }
+
+        .json-comma {
+            color: #94a3b8;
+        }
+
+        .json-children {
+            margin-left: 20px;
+            border-left: 1px solid #374151;
+            padding-left: 10px;
+            position: relative;
+        }
+
+        .json-children.collapsed {
+            display: none;
+        }
+
+        /* 计数和状态提示 */
+        .json-count-hint {
+            color: #64748b;
+            font-size: 11px;
+            font-style: italic;
+            margin-left: 6px;
+            opacity: 0.8;
+        }
+
+        .json-empty-hint {
+            color: #64748b;
+            font-size: 11px;
+            font-style: italic;
+            margin-left: 4px;
+            opacity: 0.6;
+        }
+
+        /* JSON工具栏 */
+        .json-toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .json-btn {
+            background: #475569;
+            color: #e2e8f0;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .json-btn:hover {
+            background: #64748b;
+            transform: translateY(-1px);
+        }
+
+        .json-btn.active {
+            background: #667eea;
+        }
+
+        .json-path {
+            background: #334155;
+            color: #94a3b8;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: monospace;
+            margin-left: auto;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .json-stats {
+            color: #94a3b8;
+            font-size: 11px;
+            margin-left: 10px;
+        }
+
+        /* 复制提示 */
+        .copy-tooltip {
+            position: absolute;
+            background: #1f2937;
+            color: #10b981;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            top: -30px;
+            left: 0;
+            z-index: 100;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .copy-tooltip.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .copy-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 10px;
+            border: 4px solid transparent;
+            border-top-color: #1f2937;
+        }
+
+        /* 值预览悬浮框 */
+        .json-preview {
+            position: absolute;
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 6px;
+            padding: 12px;
+            max-width: 400px;
+            max-height: 200px;
+            overflow: auto;
+            z-index: 50;
+            font-size: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .json-preview.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* 响应式滚动条 */
+        .json-viewer::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .json-viewer::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+
+        .json-viewer::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+
+        .json-viewer::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* 紧凑模式样式 */
+        .json-viewer.compact .json-node {
+            margin: 0;
+            line-height: 1.3;
+        }
+
+        .json-viewer.compact .json-children {
+            margin-left: 15px;
+            padding-left: 8px;
+        }
+
+        .json-viewer.compact .json-toggle {
+            width: 12px;
+            height: 12px;
+            line-height: 12px;
+            font-size: 8px;
+        }
+
+        .json-viewer.compact .json-key,
+        .json-viewer.compact .json-string,
+        .json-viewer.compact .json-number,
+        .json-viewer.compact .json-boolean,
+        .json-viewer.compact .json-null {
+            font-size: 12px;
+        }
+
+        .json-viewer.compact .json-toolbar {
+            margin-bottom: 10px;
+        }
+
+        .json-viewer.compact .json-btn {
+            padding: 4px 8px;
+            font-size: 11px;
+        }
+
+        /* JSON代码编辑器样式 */
+        .json-code-editor {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            height: 100%;
+            overflow: auto;
+            position: relative;
+            border-radius: 6px;
+        }
+
+        .json-editor-header {
+            background: #2d2d30;
+            border-bottom: 1px solid #3e3e42;
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .json-editor-title {
+            color: #cccccc;
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .json-editor-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .json-action-btn {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .json-action-btn:hover {
+            background: #1177bb;
+        }
+
+        .json-action-btn.secondary {
+            background: #3c3c3c;
+            color: #cccccc;
+        }
+
+        .json-action-btn.secondary:hover {
+            background: #4c4c4c;
+        }
+
+        .json-search-input {
+            background: #3c3c3c;
+            border: 1px solid #464647;
+            color: #cccccc;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            width: 200px;
+            outline: none;
+        }
+
+        .json-search-input:focus {
+            border-color: #007acc;
+            box-shadow: 0 0 0 1px #007acc;
+        }
+
+        .json-code-container {
+            display: flex;
+            height: calc(100% - 60px);
+        }
+
+        .json-line-numbers {
+            background: #1e1e1e;
+            color: #858585;
+            padding: 16px 8px;
+            text-align: right;
+            user-select: none;
+            border-right: 1px solid #3e3e42;
+            min-width: 50px;
+            font-family: inherit;
+            font-size: inherit;
+            line-height: inherit;
+        }
+
+        .json-code-content {
+            flex: 1;
+            padding: 16px;
+            overflow: auto;
+            position: relative;
+        }
+
+        .json-line {
+            position: relative;
+            min-height: 19px;
+            white-space: pre;
+        }
+
+        .json-line.highlight {
+            background: rgba(255, 255, 0, 0.2);
+            animation: highlight-flash 1s ease;
+        }
+
+        @keyframes highlight-flash {
+            0%, 100% { background: rgba(255, 255, 0, 0.2); }
+            50% { background: rgba(255, 255, 0, 0.4); }
+        }
+
+        /* JSON语法高亮 - VSCode风格 */
+        .json-string {
+            color: #ce9178;
+        }
+
+        .json-number {
+            color: #b5cea8;
+        }
+
+        .json-boolean {
+            color: #569cd6;
+        }
+
+        .json-null {
+            color: #569cd6;
+        }
+
+        .json-key {
+            color: #9cdcfe;
+        }
+
+        .json-punctuation {
+            color: #d4d4d4;
+        }
+
+        .json-bracket {
+            color: #ffd700;
+            font-weight: bold;
+        }
+
+        .json-comma {
+            color: #d4d4d4;
+        }
+
+        /* 折叠功能 */
+        .json-fold-icon {
+            position: absolute;
+            left: -20px;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #858585;
+            font-size: 10px;
+            border-radius: 2px;
+            transition: all 0.2s ease;
+        }
+
+        .json-fold-icon:hover {
+            background: #2a2a2a;
+            color: #cccccc;
+        }
+
+        .json-fold-icon.expanded::before {
+            content: '▼';
+        }
+
+        .json-fold-icon.collapsed::before {
+            content: '▶';
+        }
+
+        .json-folded-content {
+            display: none;
+        }
+
+        .json-fold-placeholder {
+            color: #858585;
+            font-style: italic;
+            cursor: pointer;
+        }
+
+        .json-fold-placeholder:hover {
+            color: #cccccc;
+        }
+
+        /* 错误和状态指示 */
+        .json-error-line {
+            background: rgba(255, 0, 0, 0.1);
+            border-left: 3px solid #f14c4c;
+        }
+
+        .json-status-bar {
+            background: #007acc;
+            color: white;
+            padding: 4px 16px;
+            font-size: 11px;
+            position: sticky;
+            bottom: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 滚动条样式 */
+        .json-code-editor::-webkit-scrollbar,
+        .json-code-content::-webkit-scrollbar {
+            width: 14px;
+            height: 14px;
+        }
+
+        .json-code-editor::-webkit-scrollbar-track,
+        .json-code-content::-webkit-scrollbar-track {
+            background: #1e1e1e;
+        }
+
+        .json-code-editor::-webkit-scrollbar-thumb,
+        .json-code-content::-webkit-scrollbar-thumb {
+            background: #424242;
+            border-radius: 7px;
+            border: 3px solid #1e1e1e;
+        }
+
+        .json-code-editor::-webkit-scrollbar-thumb:hover,
+        .json-code-content::-webkit-scrollbar-thumb:hover {
+            background: #4f4f4f;
+        }
+
+        .json-code-editor::-webkit-scrollbar-corner,
+        .json-code-content::-webkit-scrollbar-corner {
+            background: #1e1e1e;
+        }
+    </style>
+</head>
+<body>
+    <div class="compare-container">
+        <div class="header">
+            <h1>
+                <i class="fas fa-columns"></i>
+                对比查看
+            </h1>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="window.close()">
+                    <i class="fas fa-times"></i>
+                    关闭
+                </button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- HTML面板 -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <i class="fas fa-code"></i>
+                        HTML 快照
+                    </div>
+                    <div class="file-selector">
+                        <label>选择文件:</label>
+                        <select id="html-selector">
+                            <option value="">请选择HTML文件</option>
+                            {% for file in html_files %}
+                            <option value="{{ file.path }}">{{ file.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div id="html-content" class="content-area">
+                        <div class="loading">
+                            <div class="skeleton-loader"></div>
+                            <div class="loading-text">请选择HTML文件查看</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分隔条 -->
+            <div class="resizer" id="resizer"></div>
+
+            <!-- JSON面板 -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <i class="fas fa-file-code"></i>
+                        解析结果 JSON
+                    </div>
+                    <div class="file-selector">
+                        <label>选择文件:</label>
+                        <select id="json-selector">
+                            <option value="">请选择JSON文件</option>
+                            {% for file in json_files %}
+                            <option value="{{ file.path }}">{{ file.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div id="json-content" class="content-area">
+                        <div class="loading">
+                            <div class="skeleton-loader"></div>
+                            <div class="loading-text">请选择JSON文件查看</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const htmlSelector = document.getElementById('html-selector');
+        const jsonSelector = document.getElementById('json-selector');
+        const htmlContent = document.getElementById('html-content');
+        const jsonContent = document.getElementById('json-content');
+
+        // 加载HTML文件内容
+        function loadHtmlFile(filePath) {
+            if (!filePath) {
+                htmlContent.innerHTML = `
+                    <div class="loading">
+                        <div class="skeleton-loader"></div>
+                        <div class="loading-text">请选择HTML文件查看</div>
+                    </div>
+                `;
+                return;
+            }
+
+            // 检查缓存
+            if (fileCache.has(filePath)) {
+                console.log('使用缓存的HTML文件');
+                const cachedData = fileCache.get(filePath);
+                renderHtmlContent(cachedData, 0); // 缓存的文件加载时间为0
+                return;
+            }
+
+            // 创建炫酷的loading界面
+            htmlContent.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-progress">
+                        <div class="loading-progress-indeterminate"></div>
+                    </div>
+                    <div class="loading-text loading-dots">正在加载HTML文件</div>
+                </div>
+            `;
+
+            const startTime = Date.now();
+
+            fetch(`/api/file_content?path=${encodeURIComponent(filePath)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        renderHtmlContent(data, startTime);
+                    } else {
+                        htmlContent.innerHTML = `
+                            <div class="error">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                加载失败: ${data.error}
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('获取文件内容失败:', error);
+                    htmlContent.innerHTML = `
+                        <div class="error">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            网络错误: ${error.message}
+                        </div>
+                    `;
+                });
+        }
+
+        // 渲染HTML内容的独立函数
+        function renderHtmlContent(data, startTime) {
+            // 使用Blob URL优化大文件加载性能
+            const blob = new Blob([data.content], { type: 'text/html' });
+            const blobUrl = URL.createObjectURL(blob);
+            
+            // 创建iframe
+            const iframe = document.createElement('iframe');
+            iframe.className = 'html-frame';
+            iframe.src = blobUrl;
+            
+            // 创建加载覆盖层
+            const loadingOverlay = document.createElement('div');
+            loadingOverlay.className = 'loading-overlay';
+            loadingOverlay.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text loading-dots">渲染页面中</div>
+                </div>
+            `;
+            
+            // 清空内容并添加iframe和覆盖层
+            htmlContent.innerHTML = '';
+            htmlContent.style.position = 'relative';
+            htmlContent.appendChild(iframe);
+            htmlContent.appendChild(loadingOverlay);
+            
+            // 监听iframe加载完成
+            const handleLoad = () => {
+                const loadTime = startTime > 0 ? Date.now() - startTime : 0;
+                console.log(`HTML渲染完成，耗时: ${loadTime}ms${startTime === 0 ? ' (缓存)' : ''}`);
+                
+                // 添加淡入效果
+                setTimeout(() => {
+                    iframe.classList.add('loaded');
+                    loadingOverlay.classList.add('hide');
+                    
+                    // 清理blob URL
+                    setTimeout(() => {
+                        URL.revokeObjectURL(blobUrl);
+                        if (loadingOverlay.parentNode) {
+                            loadingOverlay.remove();
+                        }
+                    }, 300);
+                }, startTime === 0 ? 50 : 100); // 缓存内容更快显示
+            };
+            
+            const handleError = () => {
+                console.error('iframe加载失败');
+                URL.revokeObjectURL(blobUrl);
+                htmlContent.innerHTML = `
+                    <div class="error">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        页面渲染失败，请重试
+                    </div>
+                `;
+            };
+            
+            // 添加事件监听器
+            iframe.addEventListener('load', handleLoad);
+            iframe.addEventListener('error', handleError);
+            
+            // 超时处理 (10秒)
+            setTimeout(() => {
+                if (!iframe.classList.contains('loaded')) {
+                    console.warn('iframe加载超时，强制显示');
+                    handleLoad();
+                }
+            }, 10000);
+        }
+
+        // 加载JSON文件内容
+        function loadJsonFile(filePath) {
+            if (!filePath) {
+                jsonContent.innerHTML = `
+                    <div class="loading">
+                        <div class="skeleton-loader"></div>
+                        <div class="loading-text">请选择JSON文件查看</div>
+                    </div>
+                `;
+                return;
+            }
+
+            // 检查缓存
+            if (fileCache.has(filePath)) {
+                console.log('使用缓存的JSON文件');
+                const cachedData = fileCache.get(filePath);
+                renderJsonContent(cachedData, 0); // 缓存的文件加载时间为0
+                return;
+            }
+
+            // 创建炫酷的loading界面
+            jsonContent.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-progress">
+                        <div class="loading-progress-indeterminate"></div>
+                    </div>
+                    <div class="loading-text loading-dots">正在加载JSON文件</div>
+                </div>
+            `;
+
+            const startTime = Date.now();
+
+            fetch(`/api/file_content?path=${encodeURIComponent(filePath)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        renderJsonContent(data, startTime);
+                    } else {
+                        jsonContent.innerHTML = `
+                            <div class="error">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                加载失败: ${data.error}
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('获取JSON文件失败:', error);
+                    jsonContent.innerHTML = `
+                        <div class="error">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            网络错误: ${error.message}
+                        </div>
+                    `;
+                });
+        }
+
+        // 渲染JSON内容的独立函数
+        function renderJsonContent(data, startTime) {
+            const content = data.content;
+            const fileSize = new Blob([content]).size;
+            
+            if (startTime > 0) {
+                // 显示处理状态 (非缓存)
+                jsonContent.innerHTML = `
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text loading-dots">正在解析JSON (${formatFileSize(fileSize)})</div>
+                    </div>
+                `;
+            }
+            
+            // 对于大文件或非缓存文件，使用setTimeout避免阻塞UI
+            const delay = startTime === 0 ? 0 : (fileSize > 1024 * 1024 ? 100 : 10);
+            
+            setTimeout(() => {
+                try {
+                    let jsonObject;
+                    let isValidJson = false;
+                    let fileName = '';
+                    
+                    // 从当前选择的文件获取文件名
+                    const selectedOption = jsonSelector.options[jsonSelector.selectedIndex];
+                    if (selectedOption && selectedOption.textContent) {
+                        fileName = selectedOption.textContent;
+                    }
+                    
+                    try {
+                        // 尝试解析JSON
+                        jsonObject = JSON.parse(content);
+                        isValidJson = true;
+                    } catch (e) {
+                        console.warn('文件不是有效的JSON格式:', e.message);
+                        // 对于非JSON文件，仍然显示原始内容
+                        jsonContent.innerHTML = `
+                            <div class="json-viewer">
+                                <div class="json-toolbar">
+                                    <div class="json-stats">文件类型: 文本 | 大小: ${formatFileSize(fileSize)}</div>
+                                    <div class="json-path">📄 ${fileName}</div>
+                                </div>
+                                <pre class="json-content">${escapeHtml(content)}</pre>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    const loadTime = startTime > 0 ? Date.now() - startTime : 0;
+                    console.log(`JSON解析完成，耗时: ${loadTime}ms, 文件大小: ${formatFileSize(fileSize)}${startTime === 0 ? ' (缓存)' : ''}`);
+                    
+                    // 清空容器并创建JSON查看器
+                    jsonContent.innerHTML = '';
+                    
+                    // 创建JsonCodeEditor实例并渲染
+                    const editor = new JsonCodeEditor(jsonContent);
+                    editor.render(jsonObject, fileName);
+                    
+                    // 添加淡入效果
+                    jsonContent.style.opacity = '0';
+                    jsonContent.style.transition = 'opacity 0.3s ease';
+                    
+                    setTimeout(() => {
+                        jsonContent.style.opacity = '1';
+                    }, startTime === 0 ? 25 : 50); // 缓存内容更快显示
+                    
+                } catch (error) {
+                    console.error('JSON处理失败:', error);
+                    jsonContent.innerHTML = `
+                        <div class="error">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            文件处理失败: ${error.message}
+                        </div>
+                    `;
+                }
+            }, delay);
+        }
+
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // HTML转义
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 事件监听
+        htmlSelector.addEventListener('change', function() {
+            loadHtmlFile(this.value);
+        });
+
+        jsonSelector.addEventListener('change', function() {
+            loadJsonFile(this.value);
+        });
+
+        // 预加载机制 - 预先缓存小文件
+        const fileCache = new Map();
+        
+        function preloadSmallFiles() {
+            const allSelectors = [htmlSelector, jsonSelector];
+            
+            allSelectors.forEach(selector => {
+                Array.from(selector.options).forEach(option => {
+                    if (option.value) {
+                        // 只预加载可能较小的文件 (根据文件名判断)
+                        const fileName = option.textContent.toLowerCase();
+                        if (fileName.includes('parse_result') || fileName.includes('small') || 
+                            fileName.endsWith('.json') && !fileName.includes('large')) {
+                            
+                            // 延迟预加载，避免影响初始加载
+                            setTimeout(() => {
+                                fetch(`/api/file_content?path=${encodeURIComponent(option.value)}`)
+                                    .then(response => response.json())
+                                    .then(data => {
+                                        if (data.success && data.content.length < 100 * 1024) { // 小于100KB
+                                            fileCache.set(option.value, data);
+                                            console.log(`预加载文件: ${fileName} (${formatFileSize(data.content.length)})`);
+                                        }
+                                    })
+                                    .catch(() => {}); // 忽略预加载错误
+                            }, Math.random() * 2000 + 1000); // 随机延迟1-3秒
+                        }
+                    }
+                });
+            });
+        }
+
+        // 自动选择第一个文件并开始预加载
+        window.addEventListener('load', function() {
+            console.log('页面加载完成，开始初始化...');
+            
+            // 自动选择文件
+            if (htmlSelector.options.length > 1) {
+                htmlSelector.selectedIndex = 1;
+                console.log(`自动选择HTML文件: ${htmlSelector.options[1].textContent}`);
+                loadHtmlFile(htmlSelector.value);
+            }
+            
+            if (jsonSelector.options.length > 1) {
+                // 优先选择parse_result.json
+                let selectedIndex = 1;
+                for (let i = 1; i < jsonSelector.options.length; i++) {
+                    if (jsonSelector.options[i].textContent.toLowerCase().includes('parse_result')) {
+                        selectedIndex = i;
+                        break;
+                    }
+                }
+                jsonSelector.selectedIndex = selectedIndex;
+                console.log(`自动选择JSON文件: ${jsonSelector.options[selectedIndex].textContent}`);
+                loadJsonFile(jsonSelector.value);
+            }
+            
+            // 开始预加载
+            setTimeout(preloadSmallFiles, 2000);
+        });
+
+        // 面板大小调整
+        let isResizing = false;
+        const resizer = document.getElementById('resizer');
+        const leftPanel = document.querySelector('.panel:first-child');
+        const rightPanel = document.querySelector('.panel:last-child');
+
+        resizer.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+
+            const containerRect = document.querySelector('.main-content').getBoundingClientRect();
+            const leftWidth = e.clientX - containerRect.left - 10; // 减去左边距
+            const totalWidth = containerRect.width - 20; // 减去两边的边距和分隔条宽度
+            const leftPercent = (leftWidth / totalWidth) * 100;
+
+            if (leftPercent > 20 && leftPercent < 80) { // 限制最小和最大宽度
+                leftPanel.style.flex = `0 0 ${leftPercent}%`;
+                rightPanel.style.flex = `0 0 ${100 - leftPercent}%`;
+            }
+        });
+
+        document.addEventListener('mouseup', function() {
+            isResizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        });
+
+        // JSON代码编辑器系统
+        class JsonCodeEditor {
+            constructor(container) {
+                this.container = container;
+                this.data = null;
+                this.jsonText = '';
+                this.lines = [];
+                this.searchTerm = '';
+                this.highlightedLines = new Set();
+                this.foldedRanges = new Map(); // 存储折叠的行范围
+            }
+
+            render(data, fileName = '') {
+                this.data = data;
+                this.jsonText = JSON.stringify(data, null, 2);
+                this.lines = this.jsonText.split('\n');
+                
+                // 创建编辑器界面
+                const editor = this.createEditor(fileName);
+                this.container.innerHTML = '';
+                this.container.appendChild(editor);
+                
+                // 渲染代码内容
+                this.renderCodeContent();
+            }
+
+            createEditor(fileName) {
+                const editor = document.createElement('div');
+                editor.className = 'json-code-editor';
+                
+                // 创建头部
+                const header = document.createElement('div');
+                header.className = 'json-editor-header';
+                
+                header.innerHTML = `
+                    <div class="json-editor-title">
+                        <i class="fas fa-file-code"></i>
+                        ${fileName ? fileName : 'JSON 文件'}
+                    </div>
+                    <div class="json-editor-actions">
+                        <input type="text" class="json-search-input" placeholder="搜索..." id="json-code-search">
+                        <button class="json-action-btn secondary" id="json-fold-all">
+                            <i class="fas fa-minus-square"></i> 折叠全部
+                        </button>
+                        <button class="json-action-btn secondary" id="json-expand-all">
+                            <i class="fas fa-plus-square"></i> 展开全部
+                        </button>
+                        <button class="json-action-btn" id="json-copy-code">
+                            <i class="fas fa-copy"></i> 复制代码
+                        </button>
+                        <button class="json-action-btn" id="json-format-code">
+                            <i class="fas fa-magic"></i> 格式化
+                        </button>
+                    </div>
+                `;
+                
+                // 创建代码容器
+                const codeContainer = document.createElement('div');
+                codeContainer.className = 'json-code-container';
+                
+                // 行号区域
+                const lineNumbers = document.createElement('div');
+                lineNumbers.className = 'json-line-numbers';
+                lineNumbers.id = 'json-line-numbers';
+                
+                // 代码内容区域
+                const codeContent = document.createElement('div');
+                codeContent.className = 'json-code-content';
+                codeContent.id = 'json-code-content';
+                
+                codeContainer.appendChild(lineNumbers);
+                codeContainer.appendChild(codeContent);
+                
+                // 状态栏
+                const statusBar = document.createElement('div');
+                statusBar.className = 'json-status-bar';
+                statusBar.innerHTML = `
+                    <div>
+                        <span>行数: ${this.lines.length}</span>
+                        <span style="margin-left: 16px;">字符数: ${this.jsonText.length}</span>
+                        <span style="margin-left: 16px;">大小: ${this.formatFileSize(new Blob([this.jsonText]).size)}</span>
+                    </div>
+                    <div id="json-search-status"></div>
+                `;
+                
+                editor.appendChild(header);
+                editor.appendChild(codeContainer);
+                editor.appendChild(statusBar);
+                
+                // 绑定事件
+                this.bindEvents();
+                
+                return editor;
+            }
+
+            bindEvents() {
+                // 搜索功能
+                const searchInput = document.getElementById('json-code-search');
+                if (searchInput) {
+                    searchInput.addEventListener('input', (e) => {
+                        this.searchTerm = e.target.value;
+                        this.performSearch();
+                    });
+                }
+                
+                // 复制代码
+                const copyBtn = document.getElementById('json-copy-code');
+                if (copyBtn) {
+                    copyBtn.addEventListener('click', () => {
+                        this.copyToClipboard(this.jsonText);
+                    });
+                }
+                
+                // 格式化代码
+                const formatBtn = document.getElementById('json-format-code');
+                if (formatBtn) {
+                    formatBtn.addEventListener('click', () => {
+                        this.reformatCode();
+                    });
+                }
+                
+                // 折叠/展开
+                const foldAllBtn = document.getElementById('json-fold-all');
+                const expandAllBtn = document.getElementById('json-expand-all');
+                
+                if (foldAllBtn) {
+                    foldAllBtn.addEventListener('click', () => {
+                        this.foldAll();
+                    });
+                }
+                
+                if (expandAllBtn) {
+                    expandAllBtn.addEventListener('click', () => {
+                        this.expandAll();
+                    });
+                }
+            }
+
+            renderCodeContent() {
+                const lineNumbers = document.getElementById('json-line-numbers');
+                const codeContent = document.getElementById('json-code-content');
+                
+                if (!lineNumbers || !codeContent) return;
+                
+                // 生成行号
+                const lineNumbersHtml = this.lines.map((_, index) => 
+                    `<div class="line-number">${index + 1}</div>`
+                ).join('');
+                
+                lineNumbers.innerHTML = lineNumbersHtml;
+                
+                // 生成语法高亮的代码
+                const highlightedCode = this.lines.map((line, index) => {
+                    const highlightedLine = this.highlightSyntax(line);
+                    const foldIcon = this.needsFoldIcon(line) ? 
+                        `<span class="json-fold-icon expanded" data-line="${index}"></span>` : '';
+                    
+                    return `<div class="json-line" data-line="${index}">${foldIcon}${highlightedLine}</div>`;
+                }).join('');
+                
+                codeContent.innerHTML = highlightedCode;
+                
+                // 绑定折叠事件
+                this.bindFoldEvents();
+                
+                // 同步滚动
+                this.syncScroll();
+            }
+
+            highlightSyntax(line) {
+                // 移除前导空格但保留缩进
+                const leadingSpaces = line.match(/^(\s*)/)[1];
+                const content = line.trim();
+                
+                if (!content) return line;
+                
+                let highlighted = content;
+                
+                // 高亮字符串（包括键和值）
+                highlighted = highlighted.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match, p1) => {
+                    // 判断是否为键（后面跟着冒号）
+                    const afterMatch = highlighted.substring(highlighted.indexOf(match) + match.length).trim();
+                    if (afterMatch.startsWith(':')) {
+                        return `<span class="json-key">"${p1}"</span>`;
+                    } else {
+                        return `<span class="json-string">"${p1}"</span>`;
+                    }
+                });
+                
+                // 高亮数字
+                highlighted = highlighted.replace(/(?<!")\b(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b(?!")/g, 
+                    '<span class="json-number">$1</span>');
+                
+                // 高亮布尔值
+                highlighted = highlighted.replace(/\b(true|false)\b/g, 
+                    '<span class="json-boolean">$1</span>');
+                
+                // 高亮null
+                highlighted = highlighted.replace(/\bnull\b/g, 
+                    '<span class="json-null">null</span>');
+                
+                // 高亮括号
+                highlighted = highlighted.replace(/[\[\]]/g, 
+                    '<span class="json-bracket">$&</span>');
+                highlighted = highlighted.replace(/[{}]/g, 
+                    '<span class="json-bracket">$&</span>');
+                
+                // 高亮逗号和冒号
+                highlighted = highlighted.replace(/,/g, 
+                    '<span class="json-comma">,</span>');
+                highlighted = highlighted.replace(/:/g, 
+                    '<span class="json-punctuation">:</span>');
+                
+                return leadingSpaces + highlighted;
+            }
+
+            needsFoldIcon(line) {
+                const trimmed = line.trim();
+                return trimmed.endsWith('{') || trimmed.endsWith('[');
+            }
+
+            bindFoldEvents() {
+                const foldIcons = document.querySelectorAll('.json-fold-icon');
+                foldIcons.forEach(icon => {
+                    icon.addEventListener('click', (e) => {
+                        const lineIndex = parseInt(e.target.dataset.line);
+                        this.toggleFold(lineIndex);
+                    });
+                });
+            }
+
+            toggleFold(startLine) {
+                const endLine = this.findMatchingBracket(startLine);
+                if (endLine === -1) return;
+                
+                const foldIcon = document.querySelector(`[data-line="${startLine}"].json-fold-icon`);
+                if (!foldIcon) return;
+                
+                const isExpanded = foldIcon.classList.contains('expanded');
+                
+                if (isExpanded) {
+                    // 折叠
+                    foldIcon.classList.remove('expanded');
+                    foldIcon.classList.add('collapsed');
+                    this.hideLines(startLine + 1, endLine - 1);
+                    this.foldedRanges.set(startLine, endLine);
+                } else {
+                    // 展开
+                    foldIcon.classList.remove('collapsed');
+                    foldIcon.classList.add('expanded');
+                    this.showLines(startLine + 1, endLine - 1);
+                    this.foldedRanges.delete(startLine);
+                }
+            }
+
+            findMatchingBracket(startLine) {
+                const startChar = this.lines[startLine].trim().slice(-1);
+                const endChar = startChar === '{' ? '}' : ']';
+                
+                let level = 0;
+                for (let i = startLine; i < this.lines.length; i++) {
+                    const line = this.lines[i];
+                    for (let char of line) {
+                        if (char === startChar) level++;
+                        if (char === endChar) level--;
+                        if (level === 0 && i > startLine) {
+                            return i;
+                        }
+                    }
+                }
+                return -1;
+            }
+
+            hideLines(startLine, endLine) {
+                for (let i = startLine; i <= endLine; i++) {
+                    const lineElement = document.querySelector(`[data-line="${i}"].json-line`);
+                    const numberElement = document.querySelector(`.line-number:nth-child(${i + 1})`);
+                    if (lineElement) lineElement.style.display = 'none';
+                    if (numberElement) numberElement.style.display = 'none';
+                }
+            }
+
+            showLines(startLine, endLine) {
+                for (let i = startLine; i <= endLine; i++) {
+                    const lineElement = document.querySelector(`[data-line="${i}"].json-line`);
+                    const numberElement = document.querySelector(`.line-number:nth-child(${i + 1})`);
+                    if (lineElement) lineElement.style.display = 'block';
+                    if (numberElement) numberElement.style.display = 'block';
+                }
+            }
+
+            foldAll() {
+                this.lines.forEach((line, index) => {
+                    if (this.needsFoldIcon(line)) {
+                        const endLine = this.findMatchingBracket(index);
+                        if (endLine !== -1) {
+                            const foldIcon = document.querySelector(`[data-line="${index}"].json-fold-icon`);
+                            if (foldIcon && foldIcon.classList.contains('expanded')) {
+                                this.toggleFold(index);
+                            }
+                        }
+                    }
+                });
+            }
+
+            expandAll() {
+                this.foldedRanges.forEach((endLine, startLine) => {
+                    const foldIcon = document.querySelector(`[data-line="${startLine}"].json-fold-icon`);
+                    if (foldIcon && foldIcon.classList.contains('collapsed')) {
+                        this.toggleFold(startLine);
+                    }
+                });
+            }
+
+            performSearch() {
+                // 清除之前的高亮
+                this.highlightedLines.clear();
+                document.querySelectorAll('.json-line.highlight').forEach(line => {
+                    line.classList.remove('highlight');
+                });
+                
+                if (!this.searchTerm) {
+                    document.getElementById('json-search-status').textContent = '';
+                    return;
+                }
+                
+                let matchCount = 0;
+                let firstMatchLine = -1;
+                
+                this.lines.forEach((line, index) => {
+                    if (line.toLowerCase().includes(this.searchTerm.toLowerCase())) {
+                        this.highlightedLines.add(index);
+                        matchCount++;
+                        if (firstMatchLine === -1) {
+                            firstMatchLine = index;
+                        }
+                        
+                        const lineElement = document.querySelector(`[data-line="${index}"].json-line`);
+                        if (lineElement) {
+                            lineElement.classList.add('highlight');
+                        }
+                    }
+                });
+                
+                // 更新搜索状态
+                const statusElement = document.getElementById('json-search-status');
+                if (statusElement) {
+                    statusElement.textContent = matchCount > 0 ? 
+                        `找到 ${matchCount} 个匹配项` : '未找到匹配项';
+                }
+                
+                // 滚动到第一个匹配项
+                if (firstMatchLine !== -1) {
+                    this.scrollToLine(firstMatchLine);
+                }
+            }
+
+            scrollToLine(lineIndex) {
+                const lineElement = document.querySelector(`[data-line="${lineIndex}"].json-line`);
+                if (lineElement) {
+                    lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+
+            reformatCode() {
+                try {
+                    const formatted = JSON.stringify(this.data, null, 2);
+                    this.jsonText = formatted;
+                    this.lines = formatted.split('\n');
+                    this.renderCodeContent();
+                } catch (error) {
+                    console.error('格式化失败:', error);
+                }
+            }
+
+            syncScroll() {
+                const lineNumbers = document.getElementById('json-line-numbers');
+                const codeContent = document.getElementById('json-code-content');
+                
+                if (lineNumbers && codeContent) {
+                    codeContent.addEventListener('scroll', () => {
+                        lineNumbers.scrollTop = codeContent.scrollTop;
+                    });
+                }
+            }
+
+            formatFileSize(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+            }
+
+            async copyToClipboard(text) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    this.showCopyFeedback();
+                    return true;
+                } catch (err) {
+                    // 降级方案
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    this.showCopyFeedback();
+                    return true;
+                }
+            }
+
+            showCopyFeedback() {
+                const copyBtn = document.getElementById('json-copy-code');
+                if (copyBtn) {
+                    const originalText = copyBtn.innerHTML;
+                    copyBtn.innerHTML = '<i class="fas fa-check"></i> 已复制';
+                    copyBtn.style.background = '#28a745';
+                    
+                    setTimeout(() => {
+                        copyBtn.innerHTML = originalText;
+                        copyBtn.style.background = '#0e639c';
+                    }, 2000);
+                }
+            }
+        }
+    </script>
+</body>
+</html> 

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>任务历史 - Azure Resource Reader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-cloud-download-alt"></i> Azure Resource Reader</h1>
+            <p>优化版数据获取工具 - Web界面</p>
+        </header>
+
+        <nav class="nav">
+            <a href="/" class="nav-link"><i class="fas fa-home"></i> 主页</a>
+            <a href="/tasks" class="nav-link active"><i class="fas fa-list"></i> 任务历史</a>
+        </nav>
+
+        <main class="main">
+            <div class="tasks-container">
+                <div class="tasks-header">
+                    <h2><i class="fas fa-history"></i> 任务历史</h2>
+                    <button id="clear-tasks-btn" class="clear-btn">
+                        <i class="fas fa-trash"></i> 清空历史
+                    </button>
+                </div>
+
+                {% if tasks %}
+                <div class="tasks-grid">
+                    {% for task in tasks %}
+                    <div class="task-card">
+                        <div class="task-header">
+                            <div class="task-title">
+                                <i class="fas fa-terminal"></i>
+                                {{ task.task_type or '未知类型' }}
+                            </div>
+                            <div class="task-status status {{ task.status }}">
+                                {% if task.status == 'completed' %}
+                                    <i class="fas fa-check-circle"></i> 完成
+                                {% elif task.status == 'running' %}
+                                    <i class="fas fa-spinner fa-spin"></i> 运行中
+                                {% elif task.status == 'failed' %}
+                                    <i class="fas fa-times-circle"></i> 失败
+                                {% elif task.status == 'error' %}
+                                    <i class="fas fa-exclamation-triangle"></i> 错误
+                                {% else %}
+                                    <i class="fas fa-clock"></i> 等待中
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="task-details">
+                            <div class="detail-row">
+                                <strong>任务ID:</strong> {{ task.task_id or '未知' }}
+                            </div>
+                            <div class="detail-row">
+                                <strong>创建时间:</strong> {{ task.created_time }}
+                            </div>
+                            {% if task.duration %}
+                            <div class="detail-row">
+                                <strong>执行时间:</strong> {{ task.duration }}
+                            </div>
+                            {% endif %}
+                            <div class="detail-row">
+                                <strong>解析模式:</strong>
+                                {% if task.use_parse %}
+                                    <span class="badge success"><i class="fas fa-check"></i> 启用</span>
+                                {% else %}
+                                    <span class="badge default"><i class="fas fa-times"></i> 未启用</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="task-command">
+                            <strong>命令:</strong>
+                            <code>{{ task.command }}</code>
+                        </div>
+
+                        <div class="task-actions">
+                            <button class="view-output-btn" data-task-id="{{ task.id }}">
+                                <i class="fas fa-eye"></i> 查看输出
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <h3>暂无任务历史</h3>
+                    <p>还没有执行过任何任务</p>
+                    <a href="/" class="btn-primary">
+                        <i class="fas fa-plus"></i> 创建新任务
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- 输出查看模态框 -->
+            <div id="output-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-terminal"></i> 任务输出</h3>
+                        <button class="close-btn" onclick="closeModal()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="modal-task-info" class="task-info"></div>
+                        <div class="output-container">
+                            <pre id="modal-output" class="output"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // 查看输出按钮事件
+        document.querySelectorAll('.view-output-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const taskId = this.getAttribute('data-task-id');
+                viewTaskOutput(taskId);
+            });
+        });
+
+        // 查看任务输出
+        function viewTaskOutput(taskId) {
+            fetch(`/status/${taskId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 更新模态框内容
+                        document.getElementById('modal-task-info').innerHTML = `
+                            <div class="info-item">
+                                <strong>任务ID:</strong> ${taskId}
+                            </div>
+                            <div class="info-item">
+                                <strong>状态:</strong> <span class="status ${data.status}">${getStatusText(data.status)}</span>
+                            </div>
+                            <div class="info-item">
+                                <strong>命令:</strong> <code>${data.command}</code>
+                            </div>
+                            <div class="info-item">
+                                <strong>创建时间:</strong> ${data.created_time}
+                            </div>
+                            ${data.duration ? `<div class="info-item"><strong>执行时间:</strong> ${data.duration}</div>` : ''}
+                        `;
+                        
+                        document.getElementById('modal-output').textContent = data.output || '暂无输出';
+                        document.getElementById('output-modal').style.display = 'flex';
+                    } else {
+                        alert('获取任务信息失败: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('获取任务信息失败: ' + error.message);
+                });
+        }
+
+        // 获取状态文本
+        function getStatusText(status) {
+            const statusMap = {
+                'completed': '完成',
+                'running': '运行中',
+                'failed': '失败',
+                'error': '错误',
+                'pending': '等待中'
+            };
+            return statusMap[status] || status;
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('output-modal').style.display = 'none';
+        }
+
+        // 点击模态框外部关闭
+        document.getElementById('output-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        // 清空任务历史
+        document.getElementById('clear-tasks-btn').addEventListener('click', function() {
+            if (confirm('确定要清空所有任务历史吗？此操作不可恢复。')) {
+                fetch('/clear_tasks', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('清空失败');
+                    }
+                })
+                .catch(error => {
+                    alert('清空失败: ' + error.message);
+                });
+            }
+        });
+    </script>
+</body>
+</html> 

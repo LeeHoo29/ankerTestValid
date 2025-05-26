@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Resource Reader Web界面</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- 主内容区域 -->
+        <div class="main-content">
+            <div class="container">
+                <header class="header">
+                    <h1><i class="fas fa-cloud-download-alt"></i> Azure Resource Reader</h1>
+                    <p>优化版数据获取工具 - Web界面</p>
+                </header>
+
+                <nav class="nav">
+                    <a href="/" class="nav-link active"><i class="fas fa-home"></i> 主页</a>
+                    <a href="/tasks" class="nav-link"><i class="fas fa-list"></i> 任务历史</a>
+                </nav>
+
+                <main class="main">
+                    <div class="form-container">
+                        <h2><i class="fas fa-play-circle"></i> 提交新任务</h2>
+                        
+                        <form id="commandForm" class="command-form">
+                            <div class="form-group">
+                                <label for="task_type">
+                                    <i class="fas fa-tag"></i> 任务类型
+                                </label>
+                                <select id="task_type" name="task_type" required>
+                                    <option value="">请选择任务类型</option>
+                                    <option value="AmazonReviewStarJob" selected>AmazonReviewStarJob</option>
+                                    <option value="AmazonListingJob">AmazonListingJob</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="task_id">
+                                    <i class="fas fa-key"></i> 任务ID / Job ID
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="task_id" 
+                                    name="task_id" 
+                                    placeholder="例如: 2829160972"
+                                    required
+                                >
+                                <small class="help-text">支持长任务ID或Job ID（系统会自动转换）</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="output_type">
+                                    <i class="fas fa-file-alt"></i> 输出类型
+                                </label>
+                                <select id="output_type" name="output_type">
+                                    <option value="html" selected>HTML (自动解压)</option>
+                                    <option value="txt">TXT (自动解压)</option>
+                                    <option value="json">JSON (自动解压)</option>
+                                    <option value="raw">RAW (不解压)</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="use_parse" name="use_parse" checked>
+                                    <span class="checkmark"></span>
+                                    <i class="fas fa-magic"></i> 启用解析模式 (--with-parse)
+                                </label>
+                                <small class="help-text">同时获取原始数据和解析数据，使用优化算法</small>
+                            </div>
+
+                            <button type="submit" class="submit-btn">
+                                <i class="fas fa-rocket"></i> 执行命令
+                            </button>
+                        </form>
+
+                        <div id="command-preview" class="command-preview">
+                            <h3><i class="fas fa-terminal"></i> 命令预览</h3>
+                            <code id="preview-text">python3 src/azure_resource_reader.py AmazonReviewStarJob 2829160972 html --with-parse</code>
+                        </div>
+                    </div>
+
+                    <!-- 结果显示区域 -->
+                    <div id="result-container" class="result-container" style="display: none;">
+                        <h2><i class="fas fa-cogs"></i> 执行结果</h2>
+                        
+                        <div class="task-info">
+                            <div class="info-item">
+                                <strong>任务ID:</strong> <span id="result-task-id"></span>
+                            </div>
+                            <div class="info-item">
+                                <strong>状态:</strong> <span id="result-status" class="status"></span>
+                            </div>
+                            <div class="info-item">
+                                <strong>执行时间:</strong> <span id="result-duration"></span>
+                            </div>
+                        </div>
+
+                        <div class="output-container">
+                            <h3><i class="fas fa-terminal"></i> 命令输出</h3>
+                            <pre id="command-output" class="output"></pre>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+
+        <!-- 侧边栏 - 已完成任务 -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <i class="fas fa-chevron-left"></i>
+                    <span class="task-count-badge" id="taskCountBadge">0</span>
+                </button>
+                <h3><i class="fas fa-check-circle"></i> 已完成任务</h3>
+                <button class="refresh-btn" id="refresh-completed-btn">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+
+            <div class="sidebar-content">
+                {% if completed_tasks %}
+                <div class="completed-tasks-list">
+                    {% for task in completed_tasks %}
+                    <div class="completed-task-card">
+                        <div class="task-header">
+                            <div class="task-meta">
+                                <span class="task-type">
+                                    <i class="fas fa-tag"></i> {{ task.task_type }}
+                                </span>
+                                <span class="job-id">{{ task.job_id }}</span>
+                            </div>
+                            <div class="task-status-badges">
+                                {% if task.directory_exists %}
+                                    <span class="badge success">
+                                        <i class="fas fa-check"></i>
+                                    </span>
+                                {% else %}
+                                    <span class="badge warning">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                    </span>
+                                {% endif %}
+                                
+                                {% if task.has_parse_file %}
+                                    <span class="badge info">
+                                        <i class="fas fa-file-code"></i>
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="task-details">
+                            <div class="detail-item">
+                                <i class="fas fa-fingerprint"></i>
+                                <span class="value task-id">{{ task.actual_task_id }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <i class="fas fa-clock"></i>
+                                <span class="value time-display">{{ task.last_updated }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <i class="fas fa-files"></i>
+                                <span class="value">{{ task.file_count }} 文件</span>
+                            </div>
+                        </div>
+
+                        <div class="task-actions">
+                            <button class="action-btn view-files-btn" data-path="{{ task.full_path }}" title="查看文件">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            
+                            <button class="action-btn rerun-btn" 
+                                    data-task-type="{{ task.task_type }}" 
+                                    data-job-id="{{ task.job_id }}"
+                                    title="重新运行">
+                                <i class="fas fa-redo"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-completed-state">
+                    <i class="fas fa-tasks"></i>
+                    <p>暂无已完成任务</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 侧边栏覆盖层 (移动端) -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        
+        <!-- 对比查看界面 -->
+        <div class="compare-view-overlay" id="compareViewOverlay" style="display: none;">
+            <div class="compare-view-container">
+                <div class="compare-view-header">
+                    <div class="compare-view-title">
+                        <i class="fas fa-columns"></i>
+                        <span id="compareViewTaskTitle">对比查看</span>
+                    </div>
+                    <div class="compare-view-actions">
+                        <button class="btn btn-secondary" onclick="FileManager.closeCompareView()">
+                            <i class="fas fa-times"></i>
+                            关闭
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="compare-view-content">
+                    <div class="compare-main-content">
+                        <!-- HTML面板 -->
+                        <div class="compare-panel">
+                            <div class="compare-panel-header">
+                                <div class="compare-panel-title">
+                                    <i class="fas fa-code"></i>
+                                    HTML 快照
+                                </div>
+                                <div class="compare-file-selector">
+                                    <label>选择文件:</label>
+                                    <select id="compare-html-selector">
+                                        <option value="">请选择HTML文件</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="compare-panel-content">
+                                <div id="compare-html-content" class="compare-content-area">
+                                    <div class="compare-loading">
+                                        <i class="fas fa-sync-alt fa-spin"></i>
+                                        <div class="compare-skeleton-loader"></div>
+                                        <div class="compare-loading-text">请选择HTML文件查看</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 分隔条 -->
+                        <div class="compare-resizer" id="compareResizer">
+                            <div class="resize-handle">
+                                <div class="resize-grip"></div>
+                            </div>
+                        </div>
+
+                        <!-- JSON面板 -->
+                        <div class="compare-panel">
+                            <div class="compare-panel-header">
+                                <div class="compare-panel-title">
+                                    <i class="fas fa-file-code"></i>
+                                    解析结果 JSON
+                                </div>
+                                <div class="compare-file-selector">
+                                    <label>选择文件:</label>
+                                    <select id="compare-json-selector">
+                                        <option value="">请选择JSON文件</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="compare-panel-content">
+                                <div id="compare-json-content" class="compare-content-area">
+                                    <div class="compare-loading">
+                                        <i class="fas fa-sync-alt fa-spin"></i>
+                                        <div class="compare-skeleton-loader"></div>
+                                        <div class="compare-loading-text">请选择JSON文件查看</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文件查看模态框 -->
+    <div id="files-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-folder-open"></i> 任务文件列表</h3>
+                <div class="modal-header-actions">
+                    <button id="compare-view-btn" class="compare-btn" style="display: none;">
+                        <i class="fas fa-columns"></i> 对比查看
+                    </button>
+                    <button class="close-btn" onclick="closeFilesModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div id="files-list" class="files-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模块化JavaScript文件 -->
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/json-editor.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/html-renderer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/panel-resizer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/file-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app-core.js') }}"></script>
+
+    <!-- 向后兼容的全局函数 -->
+    <script>
+        // 向后兼容的全局函数定义
+        function closeFilesModal() {
+            const modal = document.getElementById('files-modal');
+            modal.style.display = 'none';
+        }
+
+        // 渲染JSON内容的兼容函数
+        function renderJsonContent(container, content) {
+            JsonEditor.render(container, content);
+        }
+
+        // HTML文件加载的兼容函数
+        function loadCompareHtmlFile(filePath) {
+            HtmlRenderer.loadCompareHtmlFile(filePath);
+        }
+
+        // JSON文件加载的兼容函数
+        function loadCompareJsonFile(filePath) {
+            HtmlRenderer.loadCompareJsonFile(filePath);
+        }
+
+        // 打开对比查看的兼容函数
+        function openCompareView(taskPath) {
+            FileManager.openCompareView(taskPath);
+        }
+
+        // 关闭对比查看的兼容函数
+        function closeCompareView() {
+            FileManager.closeCompareView();
+        }
+    </script>
+</body>
+</html> 
