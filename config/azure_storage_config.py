@@ -4,14 +4,18 @@ Azure Storage 配置文件
 """
 import os
 from typing import Dict, Optional
+from dotenv import load_dotenv
 
-# Azure Storage 认证配置
+# 加载.env文件中的环境变量
+load_dotenv()
+
+# Azure Storage 认证配置（从环境变量读取）
 AZURE_STORAGE_CONFIG = {
-    'client_id': 'YOUR_AZURE_CLIENT_ID',
-    'tenant_id': 'YOUR_AZURE_TENANT_ID',
-    'client_secret': 'YOUR_AZURE_CLIENT_SECRET',
-    'subscription_id': 'YOUR_AZURE_SUBSCRIPTION_ID',
-    'resource_group': 'YOUR_RESOURCE_GROUP'
+    'client_id': os.getenv('AZURE_STORAGE_CLIENT_ID', os.getenv('AZURE_CLIENT_ID', 'YOUR_AZURE_CLIENT_ID')),
+    'tenant_id': os.getenv('AZURE_STORAGE_TENANT_ID', os.getenv('AZURE_TENANT_ID', 'YOUR_AZURE_TENANT_ID')),
+    'client_secret': os.getenv('AZURE_STORAGE_CLIENT_SECRET', os.getenv('AZURE_CLIENT_SECRET', 'YOUR_AZURE_CLIENT_SECRET')),
+    'subscription_id': os.getenv('AZURE_STORAGE_SUB_ID', os.getenv('AZURE_SUBSCRIPTION_ID', 'YOUR_AZURE_SUBSCRIPTION_ID')),
+    'resource_group': os.getenv('AZURE_STORAGE_RESOURCE_GROUP', 'YOUR_RESOURCE_GROUP')
 }
 
 # 存储账户配置（需要根据实际情况调整）
