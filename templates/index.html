@@ -3,18 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Azure Resource Reader Web界面</title>
+    <title>任务检查工具看板</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
     <div class="app-layout">
+        <!-- 左侧菜单栏 -->
+        <div class="left-sidebar" id="leftSidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-tasks"></i>
+                    <span class="logo-text">Task Dashboard</span>
+                </div>
+                <button class="sidebar-toggle-btn" id="sidebarToggleBtn">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="/" class="nav-link active" data-page="azure-resource">
+                            <i class="fas fa-cloud"></i>
+                            <span class="nav-text">Azure Resource</span>
+                        </a>
+                    </li>
+                    <!-- 未来可以添加更多工具模块 -->
+                    <!-- 
+                    <li class="nav-item">
+                        <a href="/database-checker" class="nav-link" data-page="database-checker">
+                            <i class="fas fa-database"></i>
+                            <span class="nav-text">数据库检查</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/api-monitor" class="nav-link" data-page="api-monitor">
+                            <i class="fas fa-network-wired"></i>
+                            <span class="nav-text">API监控</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/log-analyzer" class="nav-link" data-page="log-analyzer">
+                            <i class="fas fa-file-alt"></i>
+                            <span class="nav-text">日志分析</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/settings" class="nav-link" data-page="settings">
+                            <i class="fas fa-cog"></i>
+                            <span class="nav-text">系统设置</span>
+                        </a>
+                    </li>
+                    -->
+                </ul>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <i class="fas fa-user-circle"></i>
+                    <span class="user-name">管理员</span>
+                </div>
+            </div>
+        </div>
+
         <!-- 主内容区域 -->
         <div class="main-content">
             <div class="container">
                 <header class="header">
-                    <h1><i class="fas fa-cloud-download-alt"></i> Azure Resource Reader</h1>
-                    <p>优化版数据获取工具 - Web界面</p>
+                    <h1><i class="fas fa-tasks"></i> 任务检查工具看板</h1>
+                    <p>统一的任务管理和监控平台 - Azure Resource Reader 模块</p>
                 </header>
 
                 <nav class="nav">
@@ -24,7 +82,8 @@
 
                 <main class="main">
                     <div class="form-container">
-                        <h2><i class="fas fa-play-circle"></i> 提交新任务</h2>
+                        <h2><i class="fas fa-cloud-download-alt"></i> Azure Resource Reader</h2>
+                        <p class="module-description">Azure资源数据获取和分析工具</p>
                         
                         <form id="commandForm" class="command-form">
                             <div class="form-group">
@@ -74,7 +133,7 @@
                             </div>
 
                             <button type="submit" class="submit-btn">
-                                <i class="fas fa-rocket"></i> 执行命令
+                                <i class="fas fa-rocket"></i> 执行任务
                             </button>
                         </form>
 
@@ -109,7 +168,7 @@
             </div>
         </div>
 
-        <!-- 侧边栏 - 已完成任务 -->
+        <!-- 右侧边栏 - 已完成任务 -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <button class="sidebar-toggle" id="sidebarToggle">
@@ -297,46 +356,93 @@
         </div>
     </div>
 
-    <!-- 模块化JavaScript文件 -->
+    <!-- 加载JavaScript文件 -->
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/json-editor.js') }}"></script>
     <script src="{{ url_for('static', filename='js/html-renderer.js') }}"></script>
     <script src="{{ url_for('static', filename='js/panel-resizer.js') }}"></script>
     <script src="{{ url_for('static', filename='js/file-manager.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app-core.js') }}"></script>
-
-    <!-- 向后兼容的全局函数 -->
+    
+    <!-- 左侧菜单栏交互脚本 -->
     <script>
-        // 向后兼容的全局函数定义
-        function closeFilesModal() {
-            const modal = document.getElementById('files-modal');
-            modal.style.display = 'none';
-        }
-
-        // 渲染JSON内容的兼容函数
-        function renderJsonContent(container, content) {
-            JsonEditor.render(container, content);
-        }
-
-        // HTML文件加载的兼容函数
-        function loadCompareHtmlFile(filePath) {
-            HtmlRenderer.loadCompareHtmlFile(filePath);
-        }
-
-        // JSON文件加载的兼容函数
-        function loadCompareJsonFile(filePath) {
-            HtmlRenderer.loadCompareJsonFile(filePath);
-        }
-
-        // 打开对比查看的兼容函数
-        function openCompareView(taskPath) {
-            FileManager.openCompareView(taskPath);
-        }
-
-        // 关闭对比查看的兼容函数
-        function closeCompareView() {
-            FileManager.closeCompareView();
-        }
+        document.addEventListener('DOMContentLoaded', function() {
+            const leftSidebar = document.getElementById('leftSidebar');
+            const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+            const mainContent = document.querySelector('.main-content');
+            
+            // 桌面端折叠/展开功能
+            sidebarToggleBtn.addEventListener('click', function() {
+                leftSidebar.classList.toggle('collapsed');
+                
+                // 更新按钮图标
+                const icon = sidebarToggleBtn.querySelector('i');
+                if (leftSidebar.classList.contains('collapsed')) {
+                    icon.className = 'fas fa-chevron-right';
+                } else {
+                    icon.className = 'fas fa-bars';
+                }
+            });
+            
+            // 移动端处理
+            function handleMobileMenu() {
+                if (window.innerWidth <= 768) {
+                    // 移动端：点击切换显示/隐藏
+                    sidebarToggleBtn.onclick = function() {
+                        leftSidebar.classList.toggle('mobile-open');
+                        
+                        // 添加/移除遮罩层
+                        let overlay = document.querySelector('.sidebar-overlay');
+                        if (!overlay) {
+                            overlay = document.createElement('div');
+                            overlay.className = 'sidebar-overlay';
+                            document.body.appendChild(overlay);
+                        }
+                        
+                        if (leftSidebar.classList.contains('mobile-open')) {
+                            overlay.classList.add('active');
+                            overlay.onclick = function() {
+                                leftSidebar.classList.remove('mobile-open');
+                                overlay.classList.remove('active');
+                            };
+                        } else {
+                            overlay.classList.remove('active');
+                        }
+                    };
+                } else {
+                    // 桌面端：恢复折叠功能
+                    leftSidebar.classList.remove('mobile-open');
+                    const overlay = document.querySelector('.sidebar-overlay');
+                    if (overlay) {
+                        overlay.classList.remove('active');
+                    }
+                }
+            }
+            
+            // 初始化和窗口大小变化时处理
+            handleMobileMenu();
+            window.addEventListener('resize', handleMobileMenu);
+            
+            // 菜单项点击处理
+            const navLinks = document.querySelectorAll('.left-sidebar .nav-link');
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    // 移除所有活动状态
+                    navLinks.forEach(l => l.classList.remove('active'));
+                    // 添加当前活动状态
+                    this.classList.add('active');
+                    
+                    // 移动端点击菜单项后关闭菜单
+                    if (window.innerWidth <= 768) {
+                        leftSidebar.classList.remove('mobile-open');
+                        const overlay = document.querySelector('.sidebar-overlay');
+                        if (overlay) {
+                            overlay.classList.remove('active');
+                        }
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html> 

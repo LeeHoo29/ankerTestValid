@@ -42,6 +42,30 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def setup_logging(verbose: bool = False):
+    """
+    设置日志配置
+    
+    Args:
+        verbose: 是否启用详细日志输出
+    """
+    if verbose:
+        # 详细模式：显示所有日志，包括Azure SDK的HTTP请求
+        logging.getLogger().setLevel(logging.INFO)
+        logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(logging.INFO)
+        logging.getLogger('azure.identity').setLevel(logging.INFO)
+        print("🔧 已启用详细日志模式")
+    else:
+        # 简化模式：隐藏Azure SDK的详细HTTP日志
+        logging.getLogger().setLevel(logging.INFO)
+        logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(logging.WARNING)
+        logging.getLogger('azure.identity').setLevel(logging.WARNING)
+        # 保持我们自己的日志
+        logging.getLogger(__name__).setLevel(logging.INFO)
+        logging.getLogger('src.azure_resource_reader_optimizer').setLevel(logging.INFO)
+        logging.getLogger('src.db.connector').setLevel(logging.INFO)
+
+
 class AzureResourceReader:
     """Azure Storage 资源读取器"""
     
@@ -712,6 +736,9 @@ def main():
   # 禁用映射文件生成
   python3 src/azure_resource_reader.py AmazonListingJob 2796867471 html --no-mapping
   
+  # 启用详细日志输出（包括HTTP请求详情）
+  python3 src/azure_resource_reader.py AmazonListingJob 2834468425 html --with-parse --verbose
+  
 映射功能说明:
   - 每次成功下载文件后，会在 data/output/task_mapping.json 中记录映射关系
   - 映射格式: 输入参数 -> 实际下载路径
@@ -765,8 +792,14 @@ def main():
     parser.add_argument('--show-mapping', 
                        action='store_true',
                        help='显示当前的任务映射文件内容')
+    parser.add_argument('--verbose', '-v',
+                       action='store_true',
+                       help='启用详细日志输出（包括HTTP请求详情）')
     
     args = parser.parse_args()
+    
+    # 根据verbose参数设置日志级别
+    setup_logging(verbose=args.verbose)
     
     # 如果只是显示映射文件内容
     if args.show_mapping:

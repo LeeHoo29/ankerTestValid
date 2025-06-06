@@ -1,0 +1,36 @@
+{
+  "name": "task-dashboard",
+  "version": "1.0.0",
+  "description": "统一的任务管理和监控平台",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "serve": "vite preview --port 3000"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.0",
+    "axios": "^1.6.0",
+    "dayjs": "^1.11.0",
+    "echarts": "^5.6.0",
+    "element-plus": "^2.4.0",
+    "vue": "^3.4.0",
+    "vue-router": "^4.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.5.0",
+    "unplugin-auto-import": "^0.16.0",
+    "unplugin-vue-components": "^0.25.0",
+    "vite": "^5.0.0"
+  },
+  "keywords": [
+    "vue",
+    "element-plus",
+    "task-management",
+    "dashboard",
+    "azure"
+  ],
+  "author": "Task Dashboard Team",
+  "license": "MIT"
+}

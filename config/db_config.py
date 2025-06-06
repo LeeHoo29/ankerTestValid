@@ -35,4 +35,17 @@ REPARSER_API_CONFIG = {
         'Connection': 'keep-alive'
     },
     'timeout': 30
+}
+
+# 重新提交爬虫任务API配置
+CRAWLER_API_CONFIG = {
+    'url': 'http://voc-prod-collector-v2.shulex.com/job/resubmit_failed',
+    'x_token': 'jE@#tkHo!T9R?!sJ',
+    'headers': {
+        'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'Host': 'voc-prod-collector-v2.shulex.com',
+        'Connection': 'keep-alive'
+    },
+    'timeout': 30
 } 

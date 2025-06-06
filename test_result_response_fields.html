@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Result和Response字段显示测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .btn { padding: 8px 16px; margin: 5px; cursor: pointer; border: none; border-radius: 4px; }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-danger { background-color: #dc3545; color: white; }
+        .btn:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .log { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; margin: 10px 0; border-radius: 4px; white-space: pre-wrap; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; }
+        .field-demo { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .field-title { font-weight: bold; color: #333; margin-bottom: 10px; }
+        .field-content { background-color: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; }
+        .valid-json { border-left: 4px solid #28a745; }
+        .invalid-json { border-left: 4px solid #ffc107; }
+        .no-data { border-left: 4px solid #6c757d; color: #6c757d; }
+        .status-tag { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .status-success { background-color: #d4edda; color: #155724; }
+        .status-warning { background-color: #fff3cd; color: #856404; }
+        .status-info { background-color: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Result和Response字段显示测试</h1>
+        
+        <div class="field-demo">
+            <h3>📋 界面改进测试</h3>
+            <p><strong>✨ 新功能:</strong></p>
+            <ul>
+                <li>合并Result状态和Response状态为单一Result列</li>
+                <li>自动检测408 IO超时错误，显示简化信息</li>
+                <li>JSON数据超过100字符自动截取</li>
+                <li>重爬按钮移至操作列</li>
+                <li>点击查看按钮可查看完整JSON数据</li>
+            </ul>
+            
+            <p><strong>API:</strong> /api/statistics/details</p>
+            <p><strong>任务类型:</strong> GoogleSearchJob</p>
+            <p><strong>详情类型:</strong> failed (失败数据)</p>
+            <p><strong>租户:</strong> Anker</p>
+            <p><strong>日期:</strong> 2025-06-04</p>
+            <button class="btn btn-primary" onclick="testAPI()">🔄 测试API</button>
+            <button class="btn btn-success" onclick="clearLog()">🧹 清空日志</button>
+        </div>
+        
+        <div id="console" class="log">
+            <strong>控制台日志:</strong><br>
+            等待测试...
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function log(message) {
+            const console = document.getElementById('console');
+            const timestamp = new Date().toLocaleTimeString();
+            console.innerHTML += `[${timestamp}] ${message}\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('console').innerHTML = '<strong>控制台日志:</strong><br>已清空...\n';
+            document.getElementById('results').innerHTML = '';
+        }
+
+        async function testAPI() {
+            log('🔄 开始测试API...');
+            
+            try {
+                const response = await fetch('/api/statistics/details', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        start_date: '2025-06-01',
+                        end_date: '2025-06-04',
+                        tenant_ids: ['Anker'],
+                        task_type: 'GoogleSearchJob',
+                        detail_type: 'failed',
+                        date: '2025-06-04',
+                        page: 1,
+                        page_size: 5,
+                        table: 'job_a'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    log(`✅ API调用成功，获取到 ${result.data.details.length} 条记录`);
+                    
+                    displayResults(result.data.details);
+                } else {
+                    log(`❌ API调用失败: ${result.message}`);
+                }
+            } catch (error) {
+                log(`💥 网络错误: ${error.message}`);
+            }
+        }
+        
+        function displayResults(details) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<h2>📋 表格界面模拟</h2>';
+            
+            details.forEach((record, index) => {
+                const recordDiv = document.createElement('div');
+                recordDiv.className = 'field-demo';
+                
+                // 模拟前端的Result显示逻辑
+                const resultDisplay = formatResultDisplay(record);
+                
+                recordDiv.innerHTML = `
+                    <h3>记录 ${index + 1}</h3>
+                    <div><strong>请求SSN:</strong> ${record.req_ssn}</div>
+                    <div><strong>状态:</strong> <span class="status-tag status-warning">${record.status}</span></div>
+                    <div><strong>Task ID:</strong> ${record.ext_ssn}</div>
+                    <div><strong>创建时间:</strong> ${record.created_at}</div>
+                    
+                    <div class="field-demo valid-json">
+                        <div class="field-title">📊 表格Result列显示</div>
+                        <div class="field-content" style="font-family: Monaco, monospace; background-color: #e8f5e8;">${resultDisplay}</div>
+                    </div>
+                    
+                    <div><strong>重爬按钮:</strong> ${record.show_recrawl_button ? '✅ 在操作列显示' : '❌ 不显示'}</div>
+                    
+                    <div class="field-demo ${getFieldClass(record.result)}">
+                        <div class="field-title">🔧 Result字段 (完整数据)</div>
+                        ${formatFieldDisplay(record.result, 'Result')}
+                    </div>
+                    
+                    <div class="field-demo ${getFieldClass(record.response)}">
+                        <div class="field-title">📡 Response字段 (完整数据)</div>
+                        ${formatFieldDisplay(record.response, 'Response')}
+                    </div>
+                `;
+                
+                resultsDiv.appendChild(recordDiv);
+            });
+        }
+        
+        // 模拟前端的formatResultDisplay方法
+        function formatResultDisplay(row) {
+            // 首先检查是否是特殊的408 IO超时错误
+            if (row.status === 'FAILED' && row.result && row.result.raw) {
+                try {
+                    const resultData = typeof row.result.raw === 'string' 
+                        ? JSON.parse(row.result.raw) 
+                        : row.result.raw;
+                    
+                    if (resultData && resultData.E3001) {
+                        const errorMsg = resultData.E3001;
+                        if (errorMsg.includes('408 IORuntimeException - SocketTimeoutException: connect timed out')) {
+                            return '408 IO超时';
+                        }
+                    }
+                } catch (error) {
+                    // JSON解析失败，继续后续处理
+                }
+            }
+            
+            // 尝试显示Result数据
+            if (row.result && row.result.raw) {
+                const resultText = row.result.is_valid_json ? row.result.formatted : row.result.raw;
+                // 如果内容太长，截取前100个字符
+                if (resultText.length > 100) {
+                    return resultText.substring(0, 100) + '...';
+                }
+                return resultText;
+            }
+            
+            // 如果没有Result数据，尝试显示Response数据
+            if (row.response && row.response.raw) {
+                const responseText = row.response.is_valid_json ? row.response.formatted : row.response.raw;
+                // 如果内容太长，截取前100个字符
+                if (responseText.length > 100) {
+                    return responseText.substring(0, 100) + '...';
+                }
+                return responseText;
+            }
+            
+            return '无数据';
+        }
+        
+        function getFieldClass(field) {
+            if (!field || !field.raw) return 'no-data';
+            return field.is_valid_json ? 'valid-json' : 'invalid-json';
+        }
+        
+        function formatFieldDisplay(field, fieldName) {
+            if (!field || !field.raw) {
+                return `<div class="field-content">无 ${fieldName} 数据</div>`;
+            }
+            
+            const statusTag = field.is_valid_json 
+                ? '<span class="status-tag status-success">有效JSON</span>'
+                : '<span class="status-tag status-warning">格式错误</span>';
+            
+            return `
+                <div><strong>状态:</strong> ${statusTag}</div>
+                ${field.error ? `<div><strong>错误:</strong> ${field.error}</div>` : ''}
+                <div><strong>原始数据:</strong></div>
+                <div class="field-content">${field.raw}</div>
+                ${field.is_valid_json ? `
+                    <div><strong>格式化数据:</strong></div>
+                    <div class="field-content">${field.formatted}</div>
+                ` : ''}
+            `;
+        }
+
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            log('🚀 页面加载完成，Result和Response字段测试已就绪');
+        });
+    </script>
+</body>
+</html> 

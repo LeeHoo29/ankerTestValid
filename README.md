@@ -1,261 +1,193 @@
-# Shulex-Anker 数据验证工具
+# 任务检查工具看板
 
-这个工具用于验证和处理Shulex-Anker的数据问题。主要功能包括连接数据库查询数据、处理业务部门提供的CSV/Excel文件，以及进行数据校验和分析。
+## 项目概述
 
-## 功能特点
+这是一个统一的任务管理和监控平台，提供Web界面来管理和监控各种工具模块的执行。目前支持Azure Resource Reader模块，未来可以扩展支持更多工具。
 
-- 连接Azure MySQL数据库进行数据查询
-- 读取并处理CSV/Excel格式的问题反馈文件
-- 进行数据验证和分析
-- 生成数据分析报告
-- 重新提交解析任务（支持批量和逐个提交）
-- 数据库问题诊断和错误分析
-- **🆕 Azure Storage集成** - 支持Blob Storage、Queue Storage、File Storage操作
+## 功能特性
 
-## 安装步骤
+### 🎯 核心功能
+- **统一看板**: 集中管理多种工具模块
+- **任务监控**: 实时监控任务执行状态
+- **历史记录**: 完整的任务执行历史
+- **文件管理**: 查看和下载任务输出文件
+- **对比查看**: 并排对比HTML和JSON数据
 
-1. 确保已安装Python 3.x
-2. 克隆本仓库到本地
-3. 安装依赖包：
+### 🔧 当前支持的工具模块
 
+#### Azure Resource Reader
+- 支持AmazonReviewStarJob和AmazonListingJob任务类型
+- 多种输出格式：HTML、TXT、JSON、RAW
+- 解析模式支持（--with-parse）
+- 自动任务ID转换
+- 文件自动解压和组织
+
+### 🚀 未来扩展计划
+- 数据库检查工具
+- API监控模块
+- 日志分析工具
+- 系统设置管理
+- 更多工具模块...
+
+## 快速开始
+
+### 环境要求
+- Python 3.9+
+- Flask
+- 其他依赖见 `requirements.txt`
+
+### 安装依赖
 ```bash
 pip install -r requirements.txt
 ```
 
-4. 配置数据库连接：
-   - 编辑config目录下的.env文件填入数据库凭据，或直接使用默认配置
-
-## 使用方法
-
-### 验证数据库连接
-
+### 环境变量配置
+复制环境变量模板：
 ```bash
-python3 src/main.py test_connection
+cp .env.example .env
 ```
 
-### 处理CSV/Excel文件
-
+编辑 `.env` 文件，填入真实的Azure认证信息：
 ```bash
-python3 src/main.py process_file --file [文件路径] --type [csv|excel]
+# Azure Storage 认证信息
+AZURE_STORAGE_CLIENT_ID=your_client_id
+AZURE_STORAGE_TENANT_ID=your_tenant_id
+AZURE_STORAGE_CLIENT_SECRET=your_client_secret
+AZURE_STORAGE_SUB_ID=your_subscription_id
+AZURE_STORAGE_RESOURCE_GROUP=your_resource_group
+
+# 兼容性变量名（可选）
+AZURE_CLIENT_ID=your_client_id
+AZURE_TENANT_ID=your_tenant_id
+AZURE_CLIENT_SECRET=your_client_secret
+AZURE_SUBSCRIPTION_ID=your_subscription_id
+AZURE_RESOURCE_GROUP=your_resource_group
 ```
 
-### Azure Storage操作
-
+### 启动应用
 ```bash
-# 测试Azure Storage连接
-python3 src/azure_storage_client.py
-
-# 在代码中使用Azure Storage
-from src.azure_storage_client import AzureStorageClient
-client = AzureStorageClient("your_storage_account_name")
+python3 web_app.py
 ```
 
-### 🆕 Azure资源读取器（支持任务映射）
+访问地址：http://localhost:5001
 
-Azure资源读取器专门用于从Azure Storage中读取线上任务数据，支持自动的参数转换和文件映射管理。
+## 使用指南
 
-```bash
-# 🆕 推荐：同时获取原始数据和解析数据
-python3 src/azure_resource_reader.py AmazonReviewStarJob 2796867471 html --with-parse
-python3 src/azure_resource_reader.py AmazonListingJob 1925464883027513344 json --with-parse
+### Azure Resource Reader 模块
 
-# 指定特定文件的同时获取解析数据
-python3 src/azure_resource_reader.py AmazonReviewStarJob 2796867471 html --with-parse --files page_1.gz
+1. **选择任务类型**：
+   - AmazonReviewStarJob：Amazon评论星级任务
+   - AmazonListingJob：Amazon商品列表任务
 
-# 读取原始数据文件（yiya0110账户）
-python3 src/azure_resource_reader.py AmazonListingJob 1925464883027513344 html
-python3 src/azure_resource_reader.py AmazonReviewStarJob 2796867471 html
+2. **输入任务ID**：
+   - 支持长任务ID或Job ID
+   - 系统会自动进行转换
 
-# 🆕 读取解析文件（collector0109账户）- 路径已修正
-# 路径结构: parse/parse/{任务类型}/{task_id}/*
-python3 src/azure_resource_reader.py --account collector0109 --parse-mode AmazonReviewStarJob 1910599147004108800 json
+3. **选择输出类型**：
+   - HTML：网页格式（推荐）
+   - TXT：纯文本格式
+   - JSON：结构化数据
+   - RAW：原始压缩文件
 
-# 指定解析文件名
-python3 src/azure_resource_reader.py --account collector0109 --parse-mode AmazonReviewStarJob 1910599147004108800 json --files result.json
+4. **启用解析模式**：
+   - 勾选后会同时获取原始数据和解析数据
+   - 使用优化算法提高处理效率
 
-# 通用功能
-# 查看当前任务映射
-python3 src/azure_resource_reader.py --show-mapping
+### 任务管理
 
-# 禁用映射文件生成
-python3 src/azure_resource_reader.py AmazonListingJob 2796867471 html --no-mapping
-
-# 获取文件信息而不下载
-python3 src/azure_resource_reader.py AmazonListingJob 2796867471 html --info-only
-
-# 列出指定任务类型的任务
-python3 src/azure_resource_reader.py AmazonListingJob 2796867471 html --list-jobs
-```
-
-**任务映射功能**:
-- 自动记录输入参数到下载路径的映射关系
-- 支持完整任务ID和job_id两种输入方式
-- 映射文件位置: `data/output/task_mapping.json`
-- 支持查看历史映射和文件统计
-
-**🆕 --with-parse模式特点**:
-- **一站式下载**: 一个命令同时获取原始数据和解析数据
-- **统一保存**: 所有文件保存在同一目录下
-- **智能映射**: 自动记录两种数据的映射关系
-- **错误容忍**: 即使解析文件不存在，原始文件仍可正常下载
-
-**支持的存储账户**:
-- `yiya0110`: 原始任务数据（AmazonListingJob, AmazonReviewStarJob）
-- `collector0109`: JSON解析结果数据（解析模式）
-
-**支持的任务类型**:
-- `AmazonListingJob`: login.gz, normal.gz
-- `AmazonReviewStarJob`: page_1.gz ~ page_5.gz
-- `解析模式`: 自动查找JSON文件
-
-详细文档: [Azure资源读取器映射指南](./notes/azure-resource-reader-mapping-guide.md) 📋
-
-### 分析任务数据库问题
-
-```bash
-python3 src/main.py analyze_tasks_with_db --file [Excel文件路径] --column "解决进度" --nrows 10
-```
-
-### 重新提交解析任务
-
-```bash
-# 直接指定任务ID
-python3 src/main.py resubmit_parse_jobs --job-ids SL2813610252 SL2789485480
-
-# 从txt文件批量提交
-python3 src/main.py resubmit_from_txt_file --file "data/input/job_ids.txt" --nrows 5
-
-# 逐个提交（推荐用于大量任务）
-python3 src/main.py resubmit_from_txt_file_one_by_one --file "data/input/job_ids.txt" --nrows 445 --delay-seconds 1.0
-```
-
-### 运行完整验证流程
-
-```bash
-python3 src/main.py validate --file [文件路径] --output [输出路径]
-```
+- **实时监控**：在主页面查看任务执行状态
+- **历史记录**：在任务历史页面查看所有执行记录
+- **文件查看**：点击已完成任务查看输出文件
+- **对比功能**：并排查看HTML快照和JSON解析结果
 
 ## 项目结构
 
 ```
 ankerTestValid/
-├── config/         # 配置文件
-│   ├── azure_storage_config.py # Azure Storage配置
-│   └── db_config.py            # 数据库配置
-├── data/           # 数据文件目录
-│   ├── input/      # 输入文件
-│   └── output/     # 输出文件
-│       ├── AmazonListingJob/    # 原始任务数据
-│       ├── AmazonReviewStarJob/ # 原始任务数据  
-│       ├── parse/               # 🆕 解析结果数据
-│       └── task_mapping.json   # 🆕 任务映射文件
-├── docs/           # 文档资料
-├── notes/          # 知识笔记
-│   ├── azure-resource-reader-mapping-guide.md # 映射功能指南
-│   ├── azure-parse-mode-guide.md              # 🆕 解析模式指南
-│   └── azure-storage-guide.md                 # Storage操作指南
-├── src/            # 源代码
-│   ├── db/         # 数据库相关模块
-│   ├── file_processors/ # 文件处理模块
-│   ├── azure_storage_client.py   # Azure Storage客户端
-│   ├── azure_resource_reader.py  # 🆕 Azure资源读取器（支持解析模式）
-│   ├── pdf_processor.py # PDF处理工具
-│   └── main.py     # 主程序入口
-└── tests/          # 测试代码
+├── web_app.py              # 主应用文件
+├── templates/              # HTML模板
+│   ├── index.html         # 主页面
+│   ├── tasks.html         # 任务历史页面
+│   └── compare.html       # 对比查看页面
+├── static/                # 静态资源
+│   ├── style.css          # 样式文件
+│   └── js/                # JavaScript文件
+├── src/                   # 工具模块源码
+│   └── azure_resource_reader.py
+├── config/                # 配置文件
+│   └── azure_storage_config.py
+├── data/                  # 数据目录
+│   └── output/            # 任务输出文件
+├── docs/                  # 文档
+├── .env                   # 环境变量（需要创建）
+├── .env.example           # 环境变量模板
+├── requirements.txt       # Python依赖
+└── README.md             # 项目说明
 ```
 
-## 📚 知识导航
+## 技术架构
 
-### Azure开发者Python指南
+### 后端技术
+- **Flask**: Web框架
+- **Python**: 主要编程语言
+- **多线程**: 后台任务执行
+- **JSON**: 数据存储和交换
 
-本项目包含Azure开发者Python相关的知识文档，提取自官方文档，包含553页的详细内容。
+### 前端技术
+- **HTML5**: 页面结构
+- **CSS3**: 样式设计
+- **JavaScript**: 交互逻辑
+- **Font Awesome**: 图标库
 
-#### 📋 文档概览
-- **总页数**: 553页
-- **内容量**: 434,782字符，59,634词
-- **代码示例**: 937个相关代码行
-- **涵盖概念**: 13个核心Azure服务和概念
+### 特色功能
+- **响应式设计**: 支持桌面和移动设备
+- **实时更新**: 任务状态实时刷新
+- **文件缓存**: 优化文件加载性能
+- **错误处理**: 完善的错误提示机制
 
-#### 🗂️ 知识分类
+## 开发指南
 
-##### 📖 核心文档
-- [📄 Azure开发者Python完整摘要](./notes/azure-developer-python-summary.md) - 文档总览和统计信息
+### 添加新工具模块
 
-##### 🔧 技术主题
-- [🚀 介绍与概述](./notes/azure-introduction.md) - Azure Python开发介绍
-- [⚙️ 环境搭建](./notes/azure-setup.md) - 开发环境配置和安装
-- [🔐 身份验证](./notes/azure-authentication.md) - Azure认证和授权
-- [🚢 部署指南](./notes/azure-deployment.md) - 应用部署策略
-- [💡 示例代码](./notes/azure-examples.md) - 实际代码示例
-- [🔧 故障排除](./notes/azure-troubleshooting.md) - 常见问题解决
-- [🗄️ **Azure Storage指南**](./notes/azure-storage-guide.md) - **Storage服务完整操作指南** ⭐
+1. **创建工具脚本**：在 `src/` 目录下创建新的工具脚本
+2. **更新路由**：在 `web_app.py` 中添加新的路由处理
+3. **添加菜单项**：在 `templates/index.html` 中添加左侧菜单项
+4. **创建模板**：为新工具创建专门的HTML模板
 
-##### 🎯 涉及的Azure服务
-- **Azure Functions** - 无服务器计算
-- **Azure App Service** - Web应用托管
-- **Azure Storage** - 云存储服务 ⭐
-  - **Blob Storage** 💾 - 对象存储（文档、图片、视频）
-  - **Queue Storage** 📬 - 消息队列服务
-  - **File Storage** 📁 - 文件共享服务
-- **Azure SQL** - 关系数据库
-- **Azure Cosmos DB** - NoSQL数据库
-- **Azure Service Bus** - 消息队列
-- **Azure Event Hub** - 事件流处理
-- **Azure Key Vault** - 密钥管理
-- **Azure Active Directory** - 身份管理
-- **Azure DevOps** - 开发运维
-- **Azure CLI** - 命令行工具
+### 环境变量管理
 
-#### 🔍 快速查找
+项目支持两套环境变量命名：
+- `AZURE_STORAGE_*`：主要变量名
+- `AZURE_*`：兼容性变量名
 
-**按场景查找:**
-- 🔄 **数据处理**: Azure Storage, Azure SQL, Azure Cosmos DB
-- 🌐 **Web开发**: Azure App Service, Azure Functions
-- 🔐 **安全认证**: Azure Active Directory, Azure Key Vault
-- 📊 **监控部署**: Azure DevOps, Azure CLI
-- 📨 **消息队列**: Azure Service Bus, Azure Event Hub
-- **💾 文件存储和管理**: Azure Storage (Blob/File/Queue) ⭐
+配置文件会自动选择可用的变量名。
 
-**按开发阶段查找:**
-1. **起步阶段**: [环境搭建](./notes/azure-setup.md) → [介绍概览](./notes/azure-introduction.md)
-2. **开发阶段**: [示例代码](./notes/azure-examples.md) → [身份验证](./notes/azure-authentication.md) → [**Storage操作**](./notes/azure-storage-guide.md) ⭐
-3. **部署阶段**: [部署指南](./notes/azure-deployment.md)
-4. **维护阶段**: [故障排除](./notes/azure-troubleshooting.md)
+## 安全说明
 
-#### 📚 完整文档
-如需查看完整的原始文档内容，请参考: [Azure开发者Python完整文本](./notes/azure-developer-python-full-text.txt)
+- ⚠️ **重要**：`.env` 文件包含敏感信息，已添加到 `.gitignore`
+- 🔒 所有Azure认证信息都通过环境变量管理
+- 📁 输出文件仅限于 `data/output` 目录访问
+- 🛡️ 文件路径安全检查防止目录遍历攻击
 
-### 🗄️ Azure Storage 快速入门
+## 贡献指南
 
-#### 🔧 已配置认证信息
-```python
-# 服务主体认证（已配置）
-AZURE_STORAGE_CONFIG = {
-    'client_id': 'YOUR_AZURE_CLIENT_ID',
-    'tenant_id': 'YOUR_AZURE_TENANT_ID',
-    'client_secret': 'YOUR_AZURE_CLIENT_SECRET',
-    'subscription_id': 'YOUR_AZURE_SUBSCRIPTION_ID',
-    'resource_group': 'shulex-prod-usw3-rg-1219'
-}
-```
+1. Fork 项目
+2. 创建功能分支
+3. 提交更改
+4. 推送到分支
+5. 创建 Pull Request
 
-#### 📖 学习资源
-- [🗄️ Azure Storage完整指南](./notes/azure-storage-guide.md) - 基于官方文档的详细操作指南
-- [Official Azure Storage Samples](https://learn.microsoft.com/en-us/azure/storage/common/storage-samples-python) - 微软官方示例
+## 许可证
 
-#### 🚀 快速开始
-1. **安装依赖**: `pip install azure-storage-blob azure-identity`
-2. **创建客户端**: 使用 `AzureStorageClient` 类
-3. **基本操作**: 上传、下载、列出、删除文件
-4. **高级功能**: SAS URL生成、元数据管理、并发操作
+本项目采用 MIT 许可证。
+
+## 联系方式
+
+如有问题或建议，请通过以下方式联系：
+- 创建 Issue
+- 提交 Pull Request
+- 发送邮件
 
 ---
 
-## 注意事项
-
-- 请勿将数据库凭据直接硬编码到代码中
-- 处理大文件时注意内存使用
-- 逐个提交大量任务时建议设置适当的延迟时间
-- 定期备份重要的分析结果文件
-- **Azure Storage认证信息已预配置，需要存储账户名才能连接** ⚠️ 
-- **🆕 解析文件路径结构**: `parse/parse/{任务类型}/{task_id}/*` （已修正）
+**注意**：这是一个内部工具，请确保在安全的环境中使用，并妥善保管Azure认证信息。

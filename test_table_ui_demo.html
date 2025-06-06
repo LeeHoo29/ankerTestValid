@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>表格UI修改演示</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .demo-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .demo-table th, .demo-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .demo-table th { background-color: #f5f5f5; font-weight: bold; }
+        .demo-table tr:nth-child(even) { background-color: #f9f9f9; }
+        .status-tag { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .status-failed { background-color: #fee; color: #c33; }
+        .result-cell { font-family: Monaco, monospace; font-size: 12px; max-width: 300px; overflow: hidden; }
+        .timeout-error { color: #e6a23c; font-weight: bold; }
+        .timeout-highlight { 
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            color: #e17055;
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #fdcb6e;
+            box-shadow: 0 1px 3px rgba(253, 203, 110, 0.3);
+            position: relative;
+        }
+        .timeout-highlight::before {
+            content: "⚠️";
+            margin-right: 4px;
+            font-size: 10px;
+        }
+        .btn { padding: 4px 8px; margin: 2px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .btn-primary { background-color: #409eff; color: white; }
+        .btn-warning { background-color: #e6a23c; color: white; }
+        .highlight { background-color: #fff3cd; border: 2px solid #ffc107; padding: 10px; margin: 20px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 失败数据列表表格UI修改演示</h1>
+        
+        <div class="highlight">
+            <h3>🎯 修改内容</h3>
+            <ul>
+                <li>✅ 合并 "Result状态" 和 "Response状态" 为单一 "Result" 列</li>
+                <li>✅ 调整表格列顺序：请求SSN | 状态 | Result | 日志状态 | 创建时间 | 到期时间 | Task ID | 操作</li>
+                <li>✅ Result列宽度从300px减少到180px，更紧凑</li>
+                <li>✅ 特殊判断：status = "FAILED" + result = E3001 408错误 → 显示高亮的 "⚠️ 408 IO超时"</li>
+                <li>✅ JSON数据长度超过100字符时自动截取并添加 "..."</li>
+                <li>✅ 重爬按钮移到 "操作" 列，位于查看按钮后面</li>
+                <li>✅ 点击查看按钮可在弹窗中查看完整的Result和Response数据</li>
+            </ul>
+        </div>
+
+        <h2>📋 修改前后对比</h2>
+
+        <h3>❌ 修改前 (旧版)</h3>
+        <table class="demo-table">
+            <tr>
+                <th>请求SSN</th>
+                <th>状态</th>
+                <th>Task ID</th>
+                <th>Result状态</th>
+                <th>Response状态</th>
+                <th>重爬</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>GOOG_20250604060158938926</td>
+                <td><span class="status-tag status-failed">FAILED</span></td>
+                <td>1930143378240438273</td>
+                <td>有效JSON</td>
+                <td>有效JSON</td>
+                <td><button class="btn btn-warning">重爬</button></td>
+                <td><button class="btn btn-primary">查看</button></td>
+            </tr>
+        </table>
+
+        <h3>✅ 修改后 (新版)</h3>
+        <table class="demo-table">
+            <tr>
+                <th>请求SSN</th>
+                <th>状态</th>
+                <th>Result</th>
+                <th>日志状态</th>
+                <th>创建时间</th>
+                <th>到期时间</th>
+                <th>Task ID</th>
+                <th>操作</th>
+            </tr>
+            <tr>
+                <td>GOOG_20250604060158938926</td>
+                <td><span class="status-tag status-failed">FAILED</span></td>
+                <td class="result-cell">
+                    <span class="timeout-highlight">⚠️ 408 IO超时</span>
+                </td>
+                <td>FAILURE</td>
+                <td>2025-06-04 06:01:59</td>
+                <td>2025-06-05 06:01:59</td>
+                <td>1930143378240438273</td>
+                <td>
+                    <button class="btn btn-primary">查看</button>
+                    <button class="btn btn-warning">重爬</button>
+                </td>
+            </tr>
+            <tr>
+                <td>GOOG_20250604055153039759</td>
+                <td><span class="status-tag status-failed">FAILED</span></td>
+                <td class="result-cell">
+                    {"E3001":"作业提交失败: 408 IORuntimeException..."}
+                </td>
+                <td>FAILURE</td>
+                <td>2025-06-04 05:51:53</td>
+                <td>2025-06-05 05:51:53</td>
+                <td>1930141150666555392</td>
+                <td>
+                    <button class="btn btn-primary">查看</button>
+                    <button class="btn btn-warning">重爬</button>
+                </td>
+            </tr>
+            <tr>
+                <td>SAMPLE_LONG_JSON_DEMO</td>
+                <td><span class="status-tag status-failed">FAILED</span></td>
+                <td class="result-cell">
+                    {"error":"very long json content that exceeds char...
+                </td>
+                <td>FAILED</td>
+                <td>2025-06-04 12:00:00</td>
+                <td>2025-06-05 12:00:00</td>
+                <td>1234567890123456789</td>
+                <td>
+                    <button class="btn btn-primary">查看</button>
+                    <button class="btn btn-warning">重爬</button>
+                </td>
+            </tr>
+        </table>
+
+        <div class="highlight">
+            <h3>💡 改进效果</h3>
+            <ul>
+                <li><strong>列顺序优化：</strong>按重要性重新排列列顺序，关键信息更靠前</li>
+                <li><strong>空间优化：</strong>Result列宽度减小到180px，整体更紧凑</li>
+                <li><strong>信息密度：</strong>Result列直接显示JSON数据，信息量更大</li>
+                <li><strong>高亮显示：</strong>408 IO超时错误使用渐变背景和警告图标，一目了然</li>
+                <li><strong>操作集中：</strong>所有操作按钮集中在最后一列，界面更整洁</li>
+                <li><strong>响应式：</strong>长JSON自动截取，保持表格美观</li>
+            </ul>
+        </div>
+
+        <div style="margin-top: 40px; padding: 20px; background-color: #f0f9ff; border-radius: 8px;">
+            <h3>🔄 测试实际效果</h3>
+            <p>访问以下链接测试实际功能：</p>
+            <ul>
+                <li><a href="http://localhost:3000" target="_blank">🎯 主应用统计看板</a></li>
+                <li><a href="http://localhost:3000/test_result_response_fields.html" target="_blank">🧪 API测试页面</a></li>
+            </ul>
+            <p><strong>测试步骤：</strong></p>
+            <ol>
+                <li>在统计看板中选择 GoogleSearchJob 任务类型</li>
+                <li>选择 Anker 租户，日期选择 2025-06-04</li>
+                <li>点击失败数据数字，查看详细列表</li>
+                <li>观察新的Result列显示效果</li>
+                <li>点击查看按钮验证详细数据展示</li>
+                <li>点击重爬按钮测试功能</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html> 

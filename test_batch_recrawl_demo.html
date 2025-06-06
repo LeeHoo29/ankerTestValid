@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>批量重爬功能演示</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f7fa; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .demo-card { 
+            background: white; 
+            border-radius: 8px; 
+            padding: 20px; 
+            margin: 20px 0; 
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1); 
+        }
+        .table-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            background: #f8f9fa; 
+            padding: 15px 20px; 
+            border-radius: 8px 8px 0 0; 
+            border-bottom: 1px solid #e6e8eb; 
+        }
+        .table-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .table-title { font-size: 16px; font-weight: bold; color: #303133; }
+        .table-count { font-size: 14px; color: #909399; }
+        .demo-table { width: 100%; border-collapse: collapse; margin: 0; }
+        .demo-table th, .demo-table td { border: 1px solid #e6e8eb; padding: 12px 8px; text-align: left; }
+        .demo-table th { background-color: #fafafa; font-weight: bold; font-size: 14px; }
+        .demo-table tr:nth-child(even) { background-color: #f9f9f9; }
+        .status-tag { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .status-failed { background-color: #fee; color: #c33; }
+        .result-cell { font-family: Monaco, monospace; font-size: 12px; max-width: 180px; overflow: hidden; }
+        .timeout-highlight { 
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            color: #e17055;
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #fdcb6e;
+            box-shadow: 0 1px 3px rgba(253, 203, 110, 0.3);
+            position: relative;
+        }
+        .timeout-highlight::before {
+            content: "⚠️";
+            margin-right: 4px;
+            font-size: 10px;
+        }
+        .btn { padding: 6px; margin: 2px; border: none; border-radius: 50%; cursor: pointer; font-size: 14px; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; }
+        .btn-primary { background-color: #409eff; color: white; }
+        .btn-warning { background-color: #e6a23c; color: white; }
+        .btn-batch { padding: 8px 16px; border-radius: 4px; font-size: 14px; width: auto; height: auto; }
+        .highlight { background-color: #e1f3d8; border: 2px solid #67c23a; padding: 15px; margin: 20px 0; border-radius: 8px; }
+        .update-highlight { background-color: #fff3cd; border: 2px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 8px; }
+        .progress-demo { 
+            background: rgba(0, 0, 0, 0.7); 
+            color: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            text-align: center; 
+            margin: 20px 0; 
+        }
+        .btn-demo { margin: 0 5px; }
+        .action-cell { text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🕷️ 失败列表页面 - 批量重爬功能演示</h1>
+        
+        <div class="update-highlight">
+            <h3>🚀 新增功能</h3>
+            <ul>
+                <li>✅ <strong>一键重爬：</strong>每个表格头部添加批量重爬按钮，显示可重爬任务数量</li>
+                <li>✅ <strong>按钮简化：</strong>查看按钮和重爬按钮都改为圆形图标样式</li>
+                <li>✅ <strong>蜘蛛图标：</strong>重爬按钮使用🕷️蜘蛛图标增强识别</li>
+                <li>✅ <strong>智能统计：</strong>只对show_recrawl_button=true的记录显示重爬功能</li>
+                <li>✅ <strong>进度提示：</strong>批量操作时显示实时进度和结果统计</li>
+            </ul>
+        </div>
+
+        <h2>📋 界面效果展示</h2>
+
+        <div class="demo-card">
+            <div class="table-header">
+                <span class="table-title">📊 JOB_A</span>
+                <div class="table-header-actions">
+                    <span class="table-count">6 条记录</span>
+                    <button class="btn btn-warning btn-batch">
+                        🔄 🕷️ 一键重爬 (4)
+                    </button>
+                </div>
+            </div>
+            
+            <table class="demo-table">
+                <tr>
+                    <th>请求SSN</th>
+                    <th>状态</th>
+                    <th>Result</th>
+                    <th>日志状态</th>
+                    <th>创建时间</th>
+                    <th>到期时间</th>
+                    <th>Task ID</th>
+                    <th>操作</th>
+                </tr>
+                <tr>
+                    <td>GOOG_20250604060158938926</td>
+                    <td><span class="status-tag status-failed">FAILED</span></td>
+                    <td class="result-cell">
+                        <span class="timeout-highlight">⚠️ 408 IO超时</span>
+                    </td>
+                    <td>FAILURE</td>
+                    <td>2025-06-04 06:01:59</td>
+                    <td>2025-06-05 06:01:59</td>
+                    <td>1930143378240438273</td>
+                    <td class="action-cell">
+                        <button class="btn btn-primary" title="查看详细信息">👁️</button>
+                        <button class="btn btn-warning" title="🕷️ 重新提交爬虫任务">🔄</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>GOOG_20250604055153039759</td>
+                    <td><span class="status-tag status-failed">FAILED</span></td>
+                    <td class="result-cell">
+                        {"E3001":"作业提交失败: 408 IORuntimeException..."}
+                    </td>
+                    <td>FAILURE</td>
+                    <td>2025-06-04 05:51:53</td>
+                    <td>2025-06-05 05:51:53</td>
+                    <td>1930141150666555392</td>
+                    <td class="action-cell">
+                        <button class="btn btn-primary" title="查看详细信息">👁️</button>
+                        <button class="btn btn-warning" title="🕷️ 重新提交爬虫任务">🔄</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>SAMPLE_TIMEOUT_JOB</td>
+                    <td><span class="status-tag status-failed">FAILED</span></td>
+                    <td class="result-cell">
+                        <span class="timeout-highlight">⚠️ 408 IO超时</span>
+                    </td>
+                    <td>FAILED</td>
+                    <td>2025-06-04 12:00:00</td>
+                    <td>2025-06-05 12:00:00</td>
+                    <td>1234567890123456789</td>
+                    <td class="action-cell">
+                        <button class="btn btn-primary" title="查看详细信息">👁️</button>
+                        <button class="btn btn-warning" title="🕷️ 重新提交爬虫任务">🔄</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>CRITICAL_ERROR_JOB</td>
+                    <td><span class="status-tag status-failed">FAILED</span></td>
+                    <td class="result-cell">
+                        {"error":"critical system error..."}
+                    </td>
+                    <td>FAILED</td>
+                    <td>2025-06-04 13:30:00</td>
+                    <td>2025-06-05 13:30:00</td>
+                    <td>9876543210987654321</td>
+                    <td class="action-cell">
+                        <button class="btn btn-primary" title="查看详细信息">👁️</button>
+                        <span style="color: #ccc; font-size: 12px;">不可重爬</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td>NETWORK_ERROR_JOB</td>
+                    <td><span class="status-tag status-failed">FAILED</span></td>
+                    <td class="result-cell">
+                        {"E3001":"Network connection timeout..."}
+                    </td>
+                    <td>FAILURE</td>
+                    <td>2025-06-04 14:15:00</td>
+                    <td>2025-06-05 14:15:00</td>
+                    <td>5555666677778888999</td>
+                    <td class="action-cell">
+                        <button class="btn btn-primary" title="查看详细信息">👁️</button>
+                        <button class="btn btn-warning" title="🕷️ 重新提交爬虫任务">🔄</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>PARSE_ERROR_JOB</td>
+                    <td><span class="status-tag status-failed">FAILED</span></td>
+                    <td class="result-cell">
+                        {"parse_error":"invalid response format..."}
+                    </td>
+                    <td>FAILED</td>
+                    <td>2025-06-04 15:45:00</td>
+                    <td>2025-06-05 15:45:00</td>
+                    <td>1111222233334444555</td>
+                    <td class="action-cell">
+                        <button class="btn btn-primary" title="查看详细信息">👁️</button>
+                        <span style="color: #ccc; font-size: 12px;">不可重爬</span>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="highlight">
+            <h3>💡 批量重爬流程</h3>
+            <ol>
+                <li><strong>智能过滤：</strong>自动识别可重爬的任务（show_recrawl_button=true）</li>
+                <li><strong>确认对话框：</strong>显示将要重爬的任务数量和表名</li>
+                <li><strong>进度监控：</strong>实时显示提交进度 (当前/总数)</li>
+                <li><strong>错误处理：</strong>单个任务失败不影响其他任务继续执行</li>
+                <li><strong>结果统计：</strong>显示成功率和详细结果日志</li>
+            </ol>
+        </div>
+
+        <div class="progress-demo">
+            <h3>📊 批量重爬进度演示</h3>
+            <p>🔄 正在批量提交重爬任务... (3/4)</p>
+            <div style="margin: 15px 0;">
+                <div style="display: inline-block; margin: 0 10px;">
+                    ✅ GOOG_20250604060158938926
+                </div>
+                <div style="display: inline-block; margin: 0 10px;">
+                    ✅ GOOG_20250604055153039759
+                </div>
+                <div style="display: inline-block; margin: 0 10px;">
+                    ✅ SAMPLE_TIMEOUT_JOB
+                </div>
+                <div style="display: inline-block; margin: 0 10px;">
+                    ⏳ NETWORK_ERROR_JOB
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-card">
+            <h3>🎯 按钮样式对比</h3>
+            <div style="display: flex; gap: 30px; align-items: center;">
+                <div>
+                    <h4>❌ 修改前</h4>
+                    <button style="padding: 4px 8px; margin: 2px; border: none; border-radius: 4px; background-color: #409eff; color: white; font-size: 12px;">查看</button>
+                    <button style="padding: 4px 8px; margin: 2px; border: none; border-radius: 4px; background-color: #e6a23c; color: white; font-size: 12px;">重爬</button>
+                </div>
+                <div>
+                    <h4>✅ 修改后</h4>
+                    <button class="btn btn-primary btn-demo" title="查看详细信息">👁️</button>
+                    <button class="btn btn-warning btn-demo" title="🕷️ 重新提交爬虫任务">🔄</button>
+                </div>
+                <div>
+                    <h4>🕷️ 批量操作</h4>
+                    <button class="btn btn-warning btn-batch">🔄 🕷️ 一键重爬 (4)</button>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 40px; padding: 20px; background-color: #f0f9ff; border-radius: 8px;">
+            <h3>🧪 测试链接</h3>
+            <p>访问以下链接测试实际功能：</p>
+            <ul>
+                <li><a href="http://localhost:3000" target="_blank">🎯 主应用统计看板</a></li>
+                <li><a href="http://localhost:3000/test_result_response_fields.html" target="_blank">🧪 API测试页面</a></li>
+            </ul>
+            <p><strong>测试步骤：</strong></p>
+            <ol>
+                <li>选择 GoogleSearchJob 任务类型，Anker 租户，日期 2025-06-04</li>
+                <li>点击失败数据数字，打开详细列表</li>
+                <li>观察表格头部的"🔄 🕷️ 一键重爬"按钮</li>
+                <li>观察操作列的圆形图标按钮</li>
+                <li>点击一键重爬按钮测试批量功能</li>
+                <li>点击单个重爬按钮测试个别重爬</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html> 

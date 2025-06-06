@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>重爬按钮测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .btn { padding: 8px 16px; margin: 5px; cursor: pointer; border: none; border-radius: 4px; }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-danger { background-color: #dc3545; color: white; }
+        .btn:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .log { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; margin: 10px 0; border-radius: 4px; white-space: pre-wrap; }
+        .task-item { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🔄 重爬按钮功能测试</h1>
+    
+    <div class="task-item">
+        <h3>示例失败任务</h3>
+        <p><strong>任务ID:</strong> SL2840612594</p>
+        <p><strong>状态:</strong> FAILED</p>
+        <p><strong>错误信息:</strong> E3001: 作业提交失败: 408 IORuntimeException - SocketTimeoutException: connect timed out</p>
+        <button id="recrawlBtn" class="btn btn-primary" onclick="resubmitCrawler('2840612594')">🔄 重爬</button>
+    </div>
+    
+    <div id="console" class="log">
+        <strong>控制台日志:</strong><br>
+        等待操作...
+    </div>
+
+    <script>
+        function log(message) {
+            const console = document.getElementById('console');
+            const timestamp = new Date().toLocaleTimeString();
+            console.innerHTML += `[${timestamp}] ${message}\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+
+        async function resubmitCrawler(reqSsn) {
+            const btn = document.getElementById('recrawlBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ 提交中...';
+            
+            log(`🔄 开始重新提交爬虫任务: ${reqSsn}`);
+            
+            try {
+                const response = await fetch('/api/resubmit_crawler', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        req_ssn: reqSsn
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    log(`✅ 重爬任务提交成功!`);
+                    log(`📋 任务ID: ${result.job_id}`);
+                    log(`💻 执行命令: ${result.command}`);
+                    log(`📝 消息: ${result.message}`);
+                    
+                    btn.className = 'btn btn-success';
+                    btn.textContent = '✅ 已提交';
+                    
+                    // 5秒后重新启用按钮
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.className = 'btn btn-primary';
+                        btn.textContent = '🔄 重爬';
+                    }, 5000);
+                } else {
+                    log(`❌ 重爬任务提交失败: ${result.message}`);
+                    btn.className = 'btn btn-danger';
+                    btn.textContent = '❌ 提交失败';
+                    
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.className = 'btn btn-primary';
+                        btn.textContent = '🔄 重爬';
+                    }, 3000);
+                }
+            } catch (error) {
+                log(`💥 网络错误: ${error.message}`);
+                btn.disabled = false;
+                btn.className = 'btn btn-danger';
+                btn.textContent = '💥 网络错误';
+                
+                setTimeout(() => {
+                    btn.className = 'btn btn-primary';
+                    btn.textContent = '🔄 重爬';
+                }, 3000);
+            }
+        }
+
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            log('🚀 页面加载完成，重爬功能已就绪');
+        });
+    </script>
+</body>
+</html> 

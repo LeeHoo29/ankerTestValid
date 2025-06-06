@@ -145,9 +145,18 @@ def try_download_from_analysis_response(task_type: str, task_id: str,
     
     try:
         # 解析analysis_response
-        download_links = parse_analysis_response(analysis_response)
+        parse_result = parse_analysis_response(task_type, analysis_response)
         
-        if not download_links:
+        if not parse_result['success']:
+            return {
+                'success': False,
+                'error': f'analysis_response解析失败: {parse_result.get("error", "未知错误")}',
+                'files_downloaded': [],
+                'extracted_blob_path': None
+            }
+        
+        download_url = parse_result['download_url']
+        if not download_url:
             return {
                 'success': False,
                 'error': 'analysis_response中没有找到下载链接',
@@ -155,7 +164,7 @@ def try_download_from_analysis_response(task_type: str, task_id: str,
                 'extracted_blob_path': None
             }
         
-        logger.info(f"📡 从analysis_response解析到 {len(download_links)} 个下载链接")
+        logger.info(f"📡 从analysis_response解析到下载链接: {download_url}")
         
         # 🆕 创建统一目录结构: data/output/{task_type}/{task_id}/
         save_path = Path(save_dir) / task_type / task_id
@@ -164,63 +173,67 @@ def try_download_from_analysis_response(task_type: str, task_id: str,
         downloaded_files = []
         extracted_blob_path = None
         
-        for i, url in enumerate(download_links):
-            try:
-                logger.info(f"📥 正在下载第 {i+1} 个文件: {url}")
-                
-                # 🆕 提取Blob路径（用于后续回退）
-                if extracted_blob_path is None:
-                    extracted_blob_path = extract_blob_path_from_url(url)
-                
-                # 使用requests下载
-                response = requests.get(url, timeout=30)
-                response.raise_for_status()
-                
-                content = response.content
-                
-                # 如果需要解压缩且是gzip内容
-                if decompress and (url.endswith('.gz') or 'gzip' in response.headers.get('content-encoding', '')):
-                    try:
-                        content = gzip.decompress(content)
-                        logger.info("✅ 文件已解压缩")
-                    except gzip.BadGzipFile:
-                        logger.warning("文件不是有效的gzip格式，保持原内容")
-                
-                # 🆕 统一使用 parse_result.json 作为文件名
-                saved_filename = 'parse_result.json'
-                file_path = save_path / saved_filename
-                
-                # 保存文件 
-                if isinstance(content, str):
+        # 处理单个下载链接
+        try:
+            logger.info(f"📥 正在下载文件: {download_url}")
+            
+            # 🆕 提取Blob路径（用于后续回退）
+            extracted_blob_path = extract_blob_path_from_url(download_url)
+            
+            # 使用requests下载
+            response = requests.get(download_url, timeout=30)
+            response.raise_for_status()
+            
+            content = response.content
+            
+            # 如果需要解压缩且是gzip内容
+            if decompress and (download_url.endswith('.gz') or 'gzip' in response.headers.get('content-encoding', '')):
+                try:
+                    content = gzip.decompress(content)
+                    logger.info("✅ 文件已解压缩")
+                except gzip.BadGzipFile:
+                    logger.warning("文件不是有效的gzip格式，保持原内容")
+            
+            # 🆕 统一使用 parse_result.json 作为文件名
+            saved_filename = 'parse_result.json'
+            file_path = save_path / saved_filename
+            
+            # 保存文件 
+            if isinstance(content, str):
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+            else:
+                # 尝试解码为UTF-8（JSON文件通常是文本）
+                try:
+                    content_str = content.decode('utf-8')
                     with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(content_str)
+                except UnicodeDecodeError:
+                    # 如果无法解码，保存为二进制
+                    with open(file_path, 'wb') as f:
                         f.write(content)
-                else:
-                    # 尝试解码为UTF-8（JSON文件通常是文本）
-                    try:
-                        content_str = content.decode('utf-8')
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write(content_str)
-                    except UnicodeDecodeError:
-                        # 如果无法解码，保存为二进制
-                        with open(file_path, 'wb') as f:
-                            f.write(content)
-                
-                logger.info(f"✅ 文件已保存: {file_path}")
-                
-                downloaded_files.append({
-                    'original_name': extract_filename_from_url(url),
-                    'saved_name': saved_filename,  # 🆕 统一的文件名
-                    'local_path': str(file_path),
-                    'size': len(content),
-                    'url': url
-                })
-                
-            except Exception as e:
-                logger.error(f"❌ 下载文件失败 ({url}): {str(e)}")
-                continue
+            
+            logger.info(f"✅ 文件已保存: {file_path}")
+            
+            downloaded_files.append({
+                'original_name': extract_filename_from_url(download_url),
+                'saved_name': saved_filename,  # 🆕 统一的文件名
+                'local_path': str(file_path),
+                'size': len(content),
+                'url': download_url
+            })
+            
+        except Exception as e:
+            logger.error(f"❌ 下载文件失败 ({download_url}): {str(e)}")
+            return {
+                'success': False,
+                'error': f'下载文件失败: {str(e)}',
+                'files_downloaded': [],
+                'extracted_blob_path': extracted_blob_path
+            }
         
         if downloaded_files:
-            logger.info(f"✅ 从analysis_response链接下载成功，共 {len(downloaded_files)} 个文件")
+            logger.info(f"✅ 从analysis_response链接下载成功")
             return {
                 'success': True,
                 'files_downloaded': downloaded_files,
@@ -228,10 +241,10 @@ def try_download_from_analysis_response(task_type: str, task_id: str,
                 'extracted_blob_path': extracted_blob_path
             }
         else:
-            logger.warning("⚠️  所有下载链接都失败了")
+            logger.warning("⚠️  下载失败")
             return {
                 'success': False,
-                'error': '所有下载链接都失败了',
+                'error': '下载失败',
                 'files_downloaded': [],
                 'extracted_blob_path': extracted_blob_path
             }

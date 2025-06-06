@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>趋势图Job名称修复演示</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f7fa; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .demo-card { 
+            background: white; 
+            border-radius: 8px; 
+            padding: 20px; 
+            margin: 20px 0; 
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1); 
+        }
+        .bug-highlight { background-color: #ffeef0; border: 2px solid #ff4d4f; padding: 15px; margin: 20px 0; border-radius: 8px; }
+        .fix-highlight { background-color: #e1f3d8; border: 2px solid #67c23a; padding: 15px; margin: 20px 0; border-radius: 8px; }
+        .comparison-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .comparison-table th, .comparison-table td { border: 1px solid #e6e8eb; padding: 12px; text-align: left; }
+        .comparison-table th { background-color: #fafafa; font-weight: bold; }
+        .before { background-color: #fff2f0; color: #a8071a; }
+        .after { background-color: #f6ffed; color: #389e0d; }
+        .code-block { 
+            background-color: #2d3748; 
+            color: #e2e8f0; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 10px 0; 
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; 
+            font-size: 14px; 
+            overflow-x: auto; 
+        }
+        .task-selector { 
+            background: #f8f9fa; 
+            border: 1px solid #e6e8eb; 
+            border-radius: 4px; 
+            padding: 10px; 
+            margin: 10px 0; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+        }
+        .trend-title-demo { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            color: white; 
+            padding: 15px; 
+            border-radius: 8px; 
+            text-align: center; 
+            font-size: 18px; 
+            font-weight: bold; 
+            margin: 10px 0; 
+        }
+        .chart-preview { 
+            border: 2px dashed #d9d9d9; 
+            height: 300px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            background: linear-gradient(45deg, #f0f2f5 25%, transparent 25%, transparent 50%, #f0f2f5 50%, #f0f2f5 75%, transparent 75%, transparent); 
+            background-size: 20px 20px; 
+            border-radius: 8px; 
+            font-size: 16px; 
+            color: #666; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐛➡️✅ 趋势图Job名称显示问题修复</h1>
+        
+        <div class="bug-highlight">
+            <h3>❌ 问题描述</h3>
+            <p><strong>现象：</strong>趋势图板块的job名称显示问题，无论选择什么任务类型，都显示"AmazonListingJob 趋势分析"</p>
+            <p><strong>影响：</strong>用户无法清楚知道当前查看的是哪个任务类型的趋势数据</p>
+        </div>
+
+        <div class="fix-highlight">
+            <h3>✅ 修复方案</h3>
+            <p><strong>解决方法：</strong>将硬编码的"AmazonListingJob"改为动态显示当前选择的任务类型</p>
+            <p><strong>修复位置：</strong>趋势图卡片标题和图表内部标题</p>
+        </div>
+
+        <h2>📊 修复对比</h2>
+
+        <table class="comparison-table">
+            <tr>
+                <th style="width: 20%;">任务类型选择</th>
+                <th style="width: 40%;">修复前显示</th>
+                <th style="width: 40%;">修复后显示</th>
+            </tr>
+            <tr>
+                <td><strong>GoogleSearchJob</strong></td>
+                <td class="before">📈 AmazonListingJob 趋势分析</td>
+                <td class="after">📈 GoogleSearchJob 趋势分析</td>
+            </tr>
+            <tr>
+                <td><strong>AmazonReviewStarJob</strong></td>
+                <td class="before">📈 AmazonListingJob 趋势分析</td>
+                <td class="after">📈 AmazonReviewStarJob 趋势分析</td>
+            </tr>
+            <tr>
+                <td><strong>AmazonListingJob</strong></td>
+                <td class="before">📈 AmazonListingJob 趋势分析</td>
+                <td class="after">📈 AmazonListingJob 趋势分析</td>
+            </tr>
+            <tr>
+                <td><strong>WalmartListingJob</strong></td>
+                <td class="before">📈 AmazonListingJob 趋势分析</td>
+                <td class="after">📈 WalmartListingJob 趋势分析</td>
+            </tr>
+        </table>
+
+        <h2>🔧 代码修复详情</h2>
+
+        <div class="demo-card">
+            <h3>修复1: 卡片标题动态化</h3>
+            <div class="code-block">
+                <div style="color: #ff6b6b;">- &lt;span&gt;📈 AmazonListingJob 趋势分析&lt;/span&gt;</div>
+                <div style="color: #51cf66;">+ &lt;span&gt;📈 {{ filterForm.task_type || 'AmazonListingJob' }} 趋势分析&lt;/span&gt;</div>
+            </div>
+        </div>
+
+        <div class="demo-card">
+            <h3>修复2: 图表标题动态化</h3>
+            <div class="code-block">
+                <div style="color: #ff6b6b;">// 修复前 - renderTrendChart函数</div>
+                <div style="color: #ff6b6b;">const renderTrendChart = (container, data) => {</div>
+                <div style="color: #ff6b6b;">  // ...</div>
+                <div style="color: #ff6b6b;">  title: {</div>
+                <div style="color: #ff6b6b;">    text: 'AmazonListingJob 任务趋势分析',</div>
+                <div style="color: #ff6b6b;">  }</div>
+                <br>
+                <div style="color: #51cf66;">// 修复后</div>
+                <div style="color: #51cf66;">const renderTrendChart = (container, data, taskType) => {</div>
+                <div style="color: #51cf66;">  // ...</div>
+                <div style="color: #51cf66;">  title: {</div>
+                <div style="color: #51cf66;">    text: `${taskType || 'AmazonListingJob'} 任务趋势分析`,</div>
+                <div style="color: #51cf66;">  }</div>
+            </div>
+        </div>
+
+        <div class="demo-card">
+            <h3>修复3: 函数调用更新</h3>
+            <div class="code-block">
+                <div style="color: #ff6b6b;">// 修复前</div>
+                <div style="color: #ff6b6b;">charts.trend = renderTrendChart(trendChart.value, statisticsData.value)</div>
+                <br>
+                <div style="color: #51cf66;">// 修复后</div>
+                <div style="color: #51cf66;">charts.trend = renderTrendChart(trendChart.value, statisticsData.value, filterForm.task_type)</div>
+            </div>
+        </div>
+
+        <h2>🎯 界面效果演示</h2>
+
+        <div class="demo-card">
+            <h3>任务类型选择器</h3>
+            <div class="task-selector">
+                <label>任务类型:</label>
+                <select style="padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="GoogleSearchJob">GoogleSearchJob</option>
+                    <option value="AmazonReviewStarJob">AmazonReviewStarJob</option>
+                    <option value="AmazonListingJob" selected>AmazonListingJob</option>
+                    <option value="WalmartListingJob">WalmartListingJob</option>
+                </select>
+                <span style="color: #666; font-size: 14px;">← 选择不同任务类型，趋势图标题会相应变化</span>
+            </div>
+        </div>
+
+        <div class="demo-card">
+            <h3>修复后的趋势图效果</h3>
+            
+            <div style="margin: 20px 0;">
+                <h4>选择 GoogleSearchJob 时:</h4>
+                <div class="trend-title-demo">📈 GoogleSearchJob 趋势分析</div>
+                <div class="chart-preview">📊 GoogleSearchJob 任务趋势图表</div>
+            </div>
+
+            <div style="margin: 20px 0;">
+                <h4>选择 AmazonReviewStarJob 时:</h4>
+                <div class="trend-title-demo">📈 AmazonReviewStarJob 趋势分析</div>
+                <div class="chart-preview">📊 AmazonReviewStarJob 任务趋势图表</div>
+            </div>
+
+            <div style="margin: 20px 0;">
+                <h4>选择 WalmartListingJob 时:</h4>
+                <div class="trend-title-demo">📈 WalmartListingJob 趋势分析</div>
+                <div class="chart-preview">📊 WalmartListingJob 任务趋势图表</div>
+            </div>
+        </div>
+
+        <div style="margin-top: 40px; padding: 20px; background-color: #f0f9ff; border-radius: 8px;">
+            <h3>🧪 测试方法</h3>
+            <p><strong>1. 访问主应用：</strong> <a href="http://localhost:3000" target="_blank">http://localhost:3000</a></p>
+            <p><strong>2. 测试步骤：</strong></p>
+            <ol>
+                <li>在任务类型下拉框中选择不同的任务类型（如GoogleSearchJob）</li>
+                <li>选择租户和时间范围，点击"查询统计"</li>
+                <li>观察"📈 趋势分析"卡片的标题是否正确显示选择的任务类型</li>
+                <li>观察趋势图内部的标题是否也正确显示</li>
+                <li>切换到不同任务类型重复测试</li>
+            </ol>
+            <p><strong>3. 预期结果：</strong>趋势图的标题应该动态显示当前选择的任务类型名称</p>
+        </div>
+
+        <div style="margin-top: 20px; padding: 15px; background-color: #e1f3d8; border-radius: 8px;">
+            <h3>✅ 修复状态</h3>
+            <ul>
+                <li>✅ 卡片标题动态化 - 已完成</li>
+                <li>✅ 图表内部标题动态化 - 已完成</li>
+                <li>✅ 函数参数传递 - 已完成</li>
+                <li>✅ 饼图标题已正确（使用数据中的taskType）</li>
+                <li>✅ 向下兼容性保持（默认值为AmazonListingJob）</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html> 

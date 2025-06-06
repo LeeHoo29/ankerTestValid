@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.db.connector import DatabaseConnector
 from src.file_processors.csv_processor import CSVProcessor
 from src.file_processors.excel_processor import ExcelProcessor
-from config.db_config import REPARSER_API_CONFIG
+from config.db_config import REPARSER_API_CONFIG, CRAWLER_API_CONFIG
 
 # 配置日志
 logging.basicConfig(
@@ -862,9 +862,171 @@ def resubmit_from_analysis_results(file_path: str, column_name: str = 'shulex_ss
         return False
 
 
-def resubmit_from_txt_file(file_path: str, nrows: int = 1, output_path: Optional[str] = None) -> bool:
+def resubmit_crawler_jobs(job_ids: List[str], output_path: Optional[str] = None) -> bool:
     """
-    从txt文件中读取任务ID并重新提交解析任务
+    重新提交爬虫任务
+    
+    Args:
+        job_ids: 要重新提交的任务ID列表（如: ["SL2813610252", "SL2789485480"]）
+        output_path: 输出结果文件路径（可选）
+        
+    Returns:
+        bool: 提交成功返回True，否则返回False
+    """
+    if not job_ids:
+        logger.error("任务ID列表不能为空")
+        return False
+    
+    print("=" * 60)
+    print("重新提交爬虫任务")
+    print("=" * 60)
+    
+    print(f"准备重新提交 {len(job_ids)} 个任务:")
+    for i, job_id in enumerate(job_ids, 1):
+        print(f"  {i}. {job_id}")
+    
+    # 准备请求
+    url = CRAWLER_API_CONFIG['url']
+    headers = CRAWLER_API_CONFIG['headers'].copy()
+    headers['X-Token'] = CRAWLER_API_CONFIG['x_token']
+    timeout = CRAWLER_API_CONFIG['timeout']
+    
+    print(f"\n发送请求到: {url}")
+    print(f"请求头:")
+    for key, value in headers.items():
+        if key == 'X-Token':
+            print(f"  {key}: {'*' * len(value[:4]) + value[:4]}...")  # 隐藏大部分token内容
+        else:
+            print(f"  {key}: {value}")
+    
+    # 逐个处理任务ID（因为API要求单个req_ssn格式）
+    all_results = []
+    success_count = 0
+    fail_count = 0
+    
+    for i, job_id in enumerate(job_ids):
+        print(f"\n--- 提交第 {i+1}/{len(job_ids)} 个任务: {job_id} ---")
+        
+        # 准备单个任务的请求体
+        request_data = {"req_ssn": job_id}
+        
+        print(f"请求体: {json.dumps(request_data, indent=2)}")
+        
+        try:
+            # 发送POST请求
+            response = requests.post(
+                url=url,
+                headers=headers,
+                json=request_data,
+                timeout=timeout
+            )
+            
+            print(f"响应状态码: {response.status_code}")
+            
+            # 解析响应
+            if response.status_code == 200:
+                try:
+                    response_data = response.json()
+                    print(f"✅ 请求成功!")
+                    print(f"响应内容:")
+                    print(json.dumps(response_data, indent=2, ensure_ascii=False))
+                    
+                    # 记录成功结果
+                    result_record = {
+                        'job_id': job_id,
+                        'status': 'submitted',
+                        'timestamp': pd.Timestamp.now(),
+                        'response': json.dumps(response_data, ensure_ascii=False),
+                        'http_status': response.status_code
+                    }
+                    success_count += 1
+                    
+                except json.JSONDecodeError:
+                    print(f"✅ 请求成功，但响应不是JSON格式:")
+                    print(f"响应内容: {response.text}")
+                    
+                    # 记录成功结果（非JSON响应）
+                    result_record = {
+                        'job_id': job_id,
+                        'status': 'submitted',
+                        'timestamp': pd.Timestamp.now(),
+                        'response': response.text,
+                        'http_status': response.status_code
+                    }
+                    success_count += 1
+                    
+            else:
+                print(f"❌ 请求失败!")
+                print(f"响应内容: {response.text}")
+                
+                # 记录失败结果
+                result_record = {
+                    'job_id': job_id,
+                    'status': 'failed',
+                    'timestamp': pd.Timestamp.now(),
+                    'response': response.text,
+                    'http_status': response.status_code
+                }
+                fail_count += 1
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"网络请求失败: {str(e)}")
+            print(f"❌ 网络请求失败: {str(e)}")
+            
+            # 记录失败结果
+            result_record = {
+                'job_id': job_id,
+                'status': 'network_error',
+                'timestamp': pd.Timestamp.now(),
+                'response': str(e),
+                'http_status': -1
+            }
+            fail_count += 1
+            
+        except Exception as e:
+            logger.error(f"处理任务时出错: {str(e)}")
+            print(f"❌ 处理任务时出错: {str(e)}")
+            
+            # 记录失败结果
+            result_record = {
+                'job_id': job_id,
+                'status': 'error',
+                'timestamp': pd.Timestamp.now(),
+                'response': str(e),
+                'http_status': -1
+            }
+            fail_count += 1
+        
+        all_results.append(result_record)
+    
+    # 生成汇总报告
+    print("\n" + "=" * 60)
+    print("提交结果汇总")
+    print("=" * 60)
+    print(f"总任务数: {len(job_ids)}")
+    print(f"成功提交: {success_count}")
+    print(f"失败提交: {fail_count}")
+    print(f"成功率: {(success_count/len(job_ids)*100):.1f}%")
+    
+    # 保存结果
+    if output_path:
+        results_df = pd.DataFrame(all_results)
+        if output_path.endswith('.csv'):
+            results_df.to_csv(output_path, index=False, encoding='utf-8')
+        else:
+            # 使用ExcelProcessor保存
+            from src.file_processors.excel_processor import ExcelProcessor
+            processor = ExcelProcessor("")  # 创建一个临时处理器
+            processor.save_to_excel(output_path, data={"重新提交爬虫结果": results_df})
+        
+        print(f"\n结果已保存至: {output_path}")
+    
+    return fail_count == 0  # 所有任务都成功才返回True
+
+
+def resubmit_crawler_from_txt_file(file_path: str, nrows: int = 1, output_path: Optional[str] = None) -> bool:
+    """
+    从txt文件中读取任务ID并重新提交爬虫任务
     
     Args:
         file_path: txt文件路径，每行一个任务ID
@@ -879,7 +1041,7 @@ def resubmit_from_txt_file(file_path: str, nrows: int = 1, output_path: Optional
         return False
     
     print("=" * 60)
-    print("从txt文件中读取任务ID并重新提交")
+    print("从txt文件中读取任务ID并重新提交爬虫任务")
     print("=" * 60)
     
     try:
@@ -910,34 +1072,48 @@ def resubmit_from_txt_file(file_path: str, nrows: int = 1, output_path: Optional
         print(f"\n成功处理 {len(job_ids)} 个任务ID")
         
         # 调用重新提交方法
-        return resubmit_parse_jobs(job_ids, output_path)
+        return resubmit_crawler_jobs(job_ids, output_path)
         
     except Exception as e:
         logger.error(f"处理txt文件时出错: {str(e)}")
         return False
 
 
-def resubmit_from_txt_file_one_by_one(file_path: str, nrows: int = 1, output_path: Optional[str] = None, delay_seconds: float = 1.0) -> bool:
+def resubmit_from_txt_file(file_path: str, nrows: int = 1, output_path: Optional[str] = None) -> bool:
     """
-    从txt文件中读取任务ID并逐个重新提交解析任务（每次提交1个）
+    从txt文件中读取任务ID并重新提交爬虫任务（为了保持向后兼容性）
+    这个函数实际上调用resubmit_crawler_from_txt_file
     
     Args:
         file_path: txt文件路径，每行一个任务ID
-        nrows: 处理的行数，默认为1
+        nrows: 读取的行数，默认为1
         output_path: 输出结果文件路径（可选）
-        delay_seconds: 每次提交之间的延迟秒数，默认1秒
         
     Returns:
-        bool: 全部提交成功返回True，否则返回False
+        bool: 提交成功返回True，否则返回False
     """
-    import time
+    # 直接调用爬虫任务提交方法
+    return resubmit_crawler_from_txt_file(file_path, nrows, output_path)
+
+
+def resubmit_parse_from_txt_file(file_path: str, nrows: int = 1, output_path: Optional[str] = None) -> bool:
+    """
+    从txt文件中读取任务ID并重新提交解析任务
     
+    Args:
+        file_path: txt文件路径，每行一个任务ID
+        nrows: 读取的行数，默认为1
+        output_path: 输出结果文件路径（可选）
+        
+    Returns:
+        bool: 提交成功返回True，否则返回False
+    """
     if not os.path.exists(file_path):
         logger.error(f"文件不存在: {file_path}")
         return False
     
     print("=" * 60)
-    print("从txt文件中读取任务ID并逐个重新提交")
+    print("从txt文件中读取任务ID并重新提交解析任务")
     print("=" * 60)
     
     try:
@@ -947,8 +1123,7 @@ def resubmit_from_txt_file_one_by_one(file_path: str, nrows: int = 1, output_pat
             lines = f.readlines()
             
         print(f"文件 {file_path} 共有 {len(lines)} 行数据")
-        print(f"将处理前 {nrows} 行数据，逐个提交")
-        print(f"每次提交间隔: {delay_seconds} 秒")
+        print(f"将读取前 {nrows} 行数据")
         
         # 处理指定行数的数据
         for i, line in enumerate(lines[:nrows]):
@@ -966,67 +1141,13 @@ def resubmit_from_txt_file_one_by_one(file_path: str, nrows: int = 1, output_pat
             logger.error("没有读取到有效的任务ID")
             return False
         
-        print(f"\n成功处理 {len(job_ids)} 个任务ID，开始逐个提交...")
+        print(f"\n成功处理 {len(job_ids)} 个任务ID")
         
-        # 逐个提交任务
-        all_results = []
-        success_count = 0
-        fail_count = 0
-        
-        for i, job_id in enumerate(job_ids):
-            print(f"\n--- 提交第 {i+1}/{len(job_ids)} 个任务: {job_id} ---")
-            
-            # 调用单个任务提交
-            result = resubmit_parse_jobs([job_id], None)  # 不保存单个结果文件
-            
-            # 记录结果
-            result_record = {
-                'sequence': i + 1,
-                'job_id': job_id,
-                'status': 'success' if result else 'failed',
-                'timestamp': pd.Timestamp.now(),
-                'batch_mode': 'individual'
-            }
-            all_results.append(result_record)
-            
-            if result:
-                success_count += 1
-                print(f"✅ 第 {i+1} 个任务提交成功")
-            else:
-                fail_count += 1
-                print(f"❌ 第 {i+1} 个任务提交失败")
-            
-            # 如果不是最后一个任务，等待指定时间
-            if i < len(job_ids) - 1:
-                print(f"等待 {delay_seconds} 秒后继续...")
-                time.sleep(delay_seconds)
-        
-        # 生成汇总报告
-        print("\n" + "=" * 60)
-        print("提交结果汇总")
-        print("=" * 60)
-        print(f"总任务数: {len(job_ids)}")
-        print(f"成功提交: {success_count}")
-        print(f"失败提交: {fail_count}")
-        print(f"成功率: {(success_count/len(job_ids)*100):.1f}%")
-        
-        # 保存详细结果
-        if output_path:
-            results_df = pd.DataFrame(all_results)
-            if output_path.endswith('.csv'):
-                results_df.to_csv(output_path, index=False, encoding='utf-8')
-            else:
-                # 使用ExcelProcessor保存
-                from src.file_processors.excel_processor import ExcelProcessor
-                processor = ExcelProcessor("")  # 创建一个临时处理器
-                processor.save_to_excel(output_path, data={"逐个提交结果": results_df})
-            
-            print(f"\n详细结果已保存至: {output_path}")
-        
-        return fail_count == 0  # 所有任务都成功才返回True
+        # 调用重新提交解析任务方法
+        return resubmit_parse_jobs(job_ids, output_path)
         
     except Exception as e:
-        logger.error(f"逐个提交过程中出错: {str(e)}")
+        logger.error(f"处理txt文件时出错: {str(e)}")
         return False
 
 
@@ -1082,22 +1203,27 @@ def main():
     resubmit_from_file_parser.add_argument('--output', '-o', help='输出结果文件路径')
     
     # 从txt文件重新提交任务命令
-    resubmit_from_txt_parser = subparsers.add_parser('resubmit_from_txt_file', help='从txt文件中读取任务ID并重新提交解析任务')
+    resubmit_from_txt_parser = subparsers.add_parser('resubmit_from_txt_file', help='从txt文件中读取任务ID并重新提交爬虫任务')
     resubmit_from_txt_parser.add_argument('--file', '-f', required=True, help='txt文件路径，每行一个任务ID')
     resubmit_from_txt_parser.add_argument('--nrows', '-n', type=int, default=1, help='读取的行数，默认为1')
     resubmit_from_txt_parser.add_argument('--output', '-o', help='输出结果文件路径')
     
-    # 从txt文件逐个重新提交任务命令
-    resubmit_one_by_one_parser = subparsers.add_parser('resubmit_from_txt_file_one_by_one', help='从txt文件中读取任务ID并逐个重新提交解析任务（每次提交1个）')
-    resubmit_one_by_one_parser.add_argument('--file', '-f', required=True, help='txt文件路径，每行一个任务ID')
-    resubmit_one_by_one_parser.add_argument('--nrows', '-n', type=int, default=1, help='处理的行数，默认为1')
-    resubmit_one_by_one_parser.add_argument('--output', '-o', help='输出结果文件路径')
-    resubmit_one_by_one_parser.add_argument('--delay-seconds', type=float, default=1.0, help='每次提交之间的延迟秒数，默认1秒')
+    # 重新提交爬虫任务命令
+    resubmit_crawler_parser = subparsers.add_parser('resubmit_crawler_jobs', help='重新提交爬虫任务')
+    resubmit_crawler_parser.add_argument('--job-ids', nargs='+', required=True, help='要重新提交的任务ID列表，如: SL2813610252 SL2789485480')
+    resubmit_crawler_parser.add_argument('--output', '-o', help='输出结果文件路径')
     
-    # 数据验证命令
-    validate_parser = subparsers.add_parser('validate', help='验证数据文件与数据库')
-    validate_parser.add_argument('--file', '-f', required=True, help='输入文件路径')
-    validate_parser.add_argument('--output', '-o', help='输出文件路径')
+    # 从txt文件重新提交爬虫任务命令
+    resubmit_crawler_from_txt_parser = subparsers.add_parser('resubmit_crawler_from_txt_file', help='从txt文件中读取任务ID并重新提交爬虫任务')
+    resubmit_crawler_from_txt_parser.add_argument('--file', '-f', required=True, help='txt文件路径，每行一个任务ID')
+    resubmit_crawler_from_txt_parser.add_argument('--nrows', '-n', type=int, default=1, help='读取的行数，默认为1')
+    resubmit_crawler_from_txt_parser.add_argument('--output', '-o', help='输出结果文件路径')
+    
+    # 从txt文件重新提交解析任务命令
+    resubmit_parse_from_txt_parser = subparsers.add_parser('resubmit_parse_from_txt_file', help='从txt文件中读取任务ID并重新提交解析任务')
+    resubmit_parse_from_txt_parser.add_argument('--file', '-f', required=True, help='txt文件路径，每行一个任务ID')
+    resubmit_parse_from_txt_parser.add_argument('--nrows', '-n', type=int, default=1, help='读取的行数，默认为1')
+    resubmit_parse_from_txt_parser.add_argument('--output', '-o', help='输出结果文件路径')
     
     # 解析命令行参数
     args = parser.parse_args()
@@ -1121,8 +1247,12 @@ def main():
         resubmit_from_analysis_results(args.file, args.column, args.output)
     elif args.command == 'resubmit_from_txt_file':
         resubmit_from_txt_file(args.file, args.nrows, args.output)
-    elif args.command == 'resubmit_from_txt_file_one_by_one':
-        resubmit_from_txt_file_one_by_one(args.file, args.nrows, args.output, args.delay_seconds)
+    elif args.command == 'resubmit_crawler_jobs':
+        resubmit_crawler_jobs(args.job_ids, args.output)
+    elif args.command == 'resubmit_crawler_from_txt_file':
+        resubmit_crawler_from_txt_file(args.file, args.nrows, args.output)
+    elif args.command == 'resubmit_parse_from_txt_file':
+        resubmit_parse_from_txt_file(args.file, args.nrows, args.output)
     else:
         parser.print_help()
 
