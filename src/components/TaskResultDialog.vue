@@ -39,11 +39,12 @@
       <div class="output-section">
         <h4>命令输出</h4>
         <el-input
+          ref="outputTextarea"
           v-model="taskResult.output"
           type="textarea"
           :rows="12"
           readonly
-          class="output-textarea"
+          class="output-textarea console-output"
         />
       </div>
 
@@ -75,7 +76,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import dayjs from 'dayjs'
 
 const props = defineProps({
@@ -85,10 +86,24 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'viewResults'])
 
+const outputTextarea = ref()
+
 const visible = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value)
 })
+
+// 监听输出内容变化，自动滚动到底部
+watch(() => props.taskResult?.output, (newOutput) => {
+  if (newOutput && outputTextarea.value) {
+    nextTick(() => {
+      const textareaEl = outputTextarea.value.textarea || outputTextarea.value.$el?.querySelector('textarea')
+      if (textareaEl) {
+        textareaEl.scrollTop = textareaEl.scrollHeight
+      }
+    })
+  }
+}, { flush: 'post' })
 
 // 获取状态类型
 const getStatusType = (status) => {
@@ -193,6 +208,61 @@ const viewResults = () => {
 .output-textarea {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 12px;
+}
+
+/* 控制台风格样式 */
+.console-output {
+  background: #1e1e1e !important;
+  border-radius: 8px !important;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+.console-output :deep(.el-textarea__inner) {
+  background-color: #1e1e1e !important;
+  color: #f8f8f2 !important;
+  border: 1px solid #3c3c3c !important;
+  border-radius: 8px !important;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Cascadia Code', 'Fira Code', 'Courier New', monospace !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+  padding: 16px !important;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #555 #2d2d2d !important;
+}
+
+.console-output :deep(.el-textarea__inner:focus) {
+  border-color: #007acc !important;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(0, 122, 204, 0.2) !important;
+}
+
+/* 滚动条样式 */
+.console-output :deep(.el-textarea__inner::-webkit-scrollbar) {
+  width: 12px !important;
+}
+
+.console-output :deep(.el-textarea__inner::-webkit-scrollbar-track) {
+  background: #2d2d2d !important;
+  border-radius: 6px !important;
+}
+
+.console-output :deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
+  background: #555 !important;
+  border-radius: 6px !important;
+  border: 2px solid #2d2d2d !important;
+}
+
+.console-output :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+  background: #777 !important;
+}
+
+/* 控制台文本颜色增强 */
+.console-output :deep(.el-textarea__inner) {
+  /* 基础文本颜色 */
+  color: #f8f8f2 !important;
+  
+  /* 模拟一些常见的控制台颜色 */
+  text-shadow: 0 0 1px rgba(248, 248, 242, 0.1) !important;
 }
 
 .dialog-footer {

@@ -964,80 +964,124 @@ def main():
     # 用于记录是否有文件成功下载
     successfully_downloaded_files = []
     
-    # 处理每个文件
-    for filename in files_to_process:
-        print(f"\n📄 处理文件: {filename}")
-        print("-" * 60)
+    # 🆕 首先检查是否存在单一压缩文件格式: compress/{task_type}/{task_id}.gz
+    single_file_path = f"compress/{args.task_type_or_job_id}/{task_id}.gz"
+    container_name = reader.storage_config['container_name']
+    
+    print(f"\n🔍 检查单一压缩文件: {single_file_path}")
+    print("-" * 60)
+    
+    # 检查单一压缩文件是否存在
+    single_file_info = reader.get_blob_info(container_name, single_file_path)
+    
+    if single_file_info is not None:
+        print(f"✅ 发现单一压缩文件!")
+        print(f"📊 文件大小: {single_file_info['size_mb']} MB")
+        print(f"📅 修改时间: {single_file_info['last_modified']}")
         
-        # 仅显示信息
-        if args.info_only:
-            blob_path = f"compress/{args.task_type_or_job_id}/{task_id}/{filename}"
-            blob_info = reader.get_blob_info('download', blob_path)
+        if not args.info_only:
+            # 读取单一压缩文件
+            print(f"📥 正在下载单一压缩文件...")
+            content = reader.read_blob_content(container_name, single_file_path, decompress=decompress)
             
-            if blob_info:
-                print(f"✅ 文件信息:")
-                print(f"  📊 大小: {blob_info['size_mb']} MB")
-                print(f"  📅 修改时间: {blob_info['last_modified']}")
-                print(f"  🔗 URL: {blob_info['url']}")
+            if content is not None:
+                print("✅ 单一压缩文件读取成功!")
+                
+                # 显示内容信息
+                if isinstance(content, str):
+                    print(f"📝 内容长度: {len(content)} 字符")
+                    
+                    # 如果是JSON类型，尝试解析
+                    if args.output_type == 'json':
+                        try:
+                            if content.strip().startswith('{') or content.strip().startswith('['):
+                                parsed_data = json.loads(content)
+                                print(f"📋 JSON解析成功，类型: {type(parsed_data)}")
+                                if isinstance(parsed_data, dict):
+                                    print(f"🔑 JSON键: {list(parsed_data.keys())}")
+                                elif isinstance(parsed_data, list):
+                                    print(f"📊 JSON数组长度: {len(parsed_data)}")
+                        except json.JSONDecodeError:
+                            print("⚠️  内容不是有效的JSON格式")
+                    
+                    # 显示预览
+                    print(f"🔍 内容预览 (前200字符):")
+                    print(content[:200] + "..." if len(content) > 200 else content)
+                    
+                else:
+                    print(f"📊 数据长度: {len(content)} 字节")
+                
+                # 保存单一压缩文件
+                # 检测内容是否为JSON格式，如果是则强制使用json扩展名
+                output_type_to_use = args.output_type
+                if isinstance(content, str) and (content.strip().startswith('{') or content.strip().startswith('[')):
+                    try:
+                        json.loads(content)  # 验证是否为有效JSON
+                        output_type_to_use = "json"  # 强制使用json格式
+                        print("🔍 检测到JSON内容，将保存为.json文件")
+                    except json.JSONDecodeError:
+                        pass  # 不是有效JSON，保持原输出类型
+                
+                save_filename = _generate_save_filename(f"{task_id}", task_id, output_type_to_use)
+                local_path = f"{args.save_dir}/{args.task_type_or_job_id}/{task_id}/{save_filename}"
+                
+                success = _save_content_to_file(content, local_path)
+                if success:
+                    print(f"💾 单一压缩文件已保存到: {local_path}")
+                    successfully_downloaded_files.append(f"{task_id}.gz")
+                    
+                    # 如果成功下载了单一压缩文件，跳过后续的多文件处理
+                    print(f"\n✅ 单一压缩文件处理完成，跳过多文件处理")
+                else:
+                    print("❌ 单一压缩文件保存失败")
             else:
-                print("❌ 文件不存在或获取信息失败")
-            continue
+                print("❌ 单一压缩文件读取失败")
+    else:
+        print(f"❌ 未找到单一压缩文件，使用原始逻辑处理多个文件")
+    
+    # 如果单一压缩文件不存在或处理失败，按原来的逻辑处理每个文件
+    if not successfully_downloaded_files:
+        print(f"\n📄 按原始逻辑处理多个文件")
+        print("=" * 40)
         
-        # 读取文件内容
-        content = reader.read_task_file(args.task_type_or_job_id, task_id, filename, decompress)
-        
-        if content is None:
-            print("❌ 读取失败或文件不存在")
-            continue
-        
-        print("✅ 读取成功!")
-        
-        # 显示内容信息
-        if isinstance(content, str):
-            print(f"📝 内容长度: {len(content)} 字符")
+        for filename in files_to_process:
+            print(f"\n📄 处理文件: {filename}")
+            print("-" * 40)
             
-            # 如果是JSON类型，尝试解析
-            if args.output_type == 'json':
-                try:
-                    if content.strip().startswith('{') or content.strip().startswith('['):
-                        parsed_data = json.loads(content)
-                        print(f"📋 JSON解析成功，类型: {type(parsed_data)}")
-                        if isinstance(parsed_data, dict):
-                            print(f"🔑 JSON键: {list(parsed_data.keys())}")
-                        elif isinstance(parsed_data, list):
-                            print(f"📊 JSON数组长度: {len(parsed_data)}")
-                except json.JSONDecodeError:
-                    print("⚠️  内容不是有效的JSON格式")
+            if args.info_only:
+                # 显示原始文件信息
+                blob_path = f"compress/{args.task_type_or_job_id}/{task_id}/{filename}"
+                blob_info = reader.get_blob_info('download', blob_path)
+                
+                if blob_info:
+                    print(f"✅ 原始文件信息:")
+                    print(f"  📊 大小: {blob_info['size_mb']} MB")
+                    print(f"  📅 修改时间: {blob_info['last_modified']}")
+                    print(f"  🔗 URL: {blob_info['url']}")
+                else:
+                    print("❌ 原始文件不存在或获取信息失败")
+                continue
             
-            # 显示预览
-            print(f"🔍 内容预览 (前200字符):")
-            print(content[:200] + "..." if len(content) > 200 else content)
+            # 读取原始文件
+            content = reader.read_task_file(args.task_type_or_job_id, task_id, filename, decompress)
             
-        else:
-            print(f"📊 数据长度: {len(content)} 字节")
-        
-        # 保存到本地文件
-        actual_filename = filename if filename else "auto_found"
-        
-        # 检测内容是否为JSON格式，如果是则强制使用json扩展名
-        output_type_to_use = args.output_type
-        if isinstance(content, str) and (content.strip().startswith('{') or content.strip().startswith('[')):
-            try:
-                json.loads(content)  # 验证是否为有效JSON
-                output_type_to_use = "json"  # 强制使用json格式
-                print("🔍 检测到JSON内容，将保存为.json文件")
-            except json.JSONDecodeError:
-                pass  # 不是有效JSON，保持原输出类型
-        
-        save_filename = _generate_save_filename(actual_filename, task_id, output_type_to_use)
-        local_path = f"{args.save_dir}/parse/{job_id}/{task_id}/{save_filename}"
-        
-        success = _save_content_to_file(content, local_path)
-        if success:
-            print(f"💾 文件已保存到: {local_path}")
-            successfully_downloaded_files.append(filename)
-        else:
-            print("❌ 保存失败")
+            if content is not None:
+                print("✅ 原始文件读取成功!")
+                if isinstance(content, str):
+                    print(f"📝 原始文件长度: {len(content)} 字符")
+                else:
+                    print(f"📊 原始文件大小: {len(content)} 字节")
+                
+                # 保存原始文件
+                save_filename = _generate_save_filename(filename, task_id, args.output_type)
+                local_path = f"{args.save_dir}/{args.task_type_or_job_id}/{task_id}/{save_filename}"
+                
+                success = _save_content_to_file(content, local_path)
+                if success:
+                    print(f"💾 原始文件已保存到: {local_path}")
+                    successfully_downloaded_files.append(filename)
+            else:
+                print("❌ 原始文件读取失败或文件不存在")
     
     # 第三步：更新任务映射文件（如果有文件成功下载且未禁用映射）
     if successfully_downloaded_files and not args.info_only and not args.no_mapping:
@@ -1619,48 +1663,127 @@ def handle_with_parse_mode(args) -> None:
         except ImportError:
             print(f"⚠️  优化器模块不可用，将在处理原始文件时使用传统方法")
     
-    # 处理每个原始文件
+    # 🆕 首先检查是否存在单一压缩文件格式: compress/{task_type}/{task_id}.gz
     print(f"\n📄 步骤2: 获取原始文件")
     print("-" * 60)
     
-    for filename in files_to_process:
-        print(f"\n📄 处理原始文件: {filename}")
-        print("-" * 40)
+    single_file_path = f"compress/{task_type}/{task_id}.gz"
+    container_name = reader.storage_config['container_name']
+    
+    print(f"\n🔍 检查单一压缩文件: {single_file_path}")
+    print("-" * 40)
+    
+    # 检查单一压缩文件是否存在
+    single_file_info = reader.get_blob_info(container_name, single_file_path)
+    
+    if single_file_info is not None:
+        print(f"✅ 发现单一压缩文件!")
+        print(f"📊 文件大小: {single_file_info['size_mb']} MB")
+        print(f"📅 修改时间: {single_file_info['last_modified']}")
         
-        if args.info_only:
-            # 显示原始文件信息
-            blob_path = f"compress/{task_type}/{task_id}/{filename}"
-            blob_info = reader.get_blob_info('download', blob_path)
+        if not args.info_only:
+            # 读取单一压缩文件
+            print(f"📥 正在下载单一压缩文件...")
+            content = reader.read_blob_content(container_name, single_file_path, decompress=decompress)
             
-            if blob_info:
-                print(f"✅ 原始文件信息:")
-                print(f"  📊 大小: {blob_info['size_mb']} MB")
-                print(f"  📅 修改时间: {blob_info['last_modified']}")
-                print(f"  🔗 URL: {blob_info['url']}")
+            if content is not None:
+                print("✅ 单一压缩文件读取成功!")
+                
+                # 显示内容信息
+                if isinstance(content, str):
+                    print(f"📝 内容长度: {len(content)} 字符")
+                    
+                    # 如果是JSON类型，尝试解析
+                    if args.output_type == 'json':
+                        try:
+                            if content.strip().startswith('{') or content.strip().startswith('['):
+                                parsed_data = json.loads(content)
+                                print(f"📋 JSON解析成功，类型: {type(parsed_data)}")
+                                if isinstance(parsed_data, dict):
+                                    print(f"🔑 JSON键: {list(parsed_data.keys())}")
+                                elif isinstance(parsed_data, list):
+                                    print(f"📊 JSON数组长度: {len(parsed_data)}")
+                        except json.JSONDecodeError:
+                            print("⚠️  内容不是有效的JSON格式")
+                    
+                    # 显示预览
+                    print(f"🔍 内容预览 (前200字符):")
+                    print(content[:200] + "..." if len(content) > 200 else content)
+                    
+                else:
+                    print(f"📊 数据长度: {len(content)} 字节")
+                
+                # 保存单一压缩文件
+                # 检测内容是否为JSON格式，如果是则强制使用json扩展名
+                output_type_to_use = args.output_type
+                if isinstance(content, str) and (content.strip().startswith('{') or content.strip().startswith('[')):
+                    try:
+                        json.loads(content)  # 验证是否为有效JSON
+                        output_type_to_use = "json"  # 强制使用json格式
+                        print("🔍 检测到JSON内容，将保存为.json文件")
+                    except json.JSONDecodeError:
+                        pass  # 不是有效JSON，保持原输出类型
+                
+                save_filename = _generate_save_filename(f"{task_id}", task_id, output_type_to_use)
+                local_path = f"{args.save_dir}/{task_type}/{task_id}/{save_filename}"
+                
+                success = _save_content_to_file(content, local_path)
+                if success:
+                    print(f"💾 单一压缩文件已保存到: {local_path}")
+                    successfully_downloaded_files.append(f"{task_id}.gz")
+                    
+                    # 如果成功下载了单一压缩文件，跳过后续的多文件处理
+                    print(f"\n✅ 单一压缩文件处理完成，跳过多文件处理")
+                else:
+                    print("❌ 单一压缩文件保存失败")
             else:
-                print("❌ 原始文件不存在或获取信息失败")
-            continue
+                print("❌ 单一压缩文件读取失败")
+    else:
+        print(f"❌ 未找到单一压缩文件，使用原始逻辑处理多个文件")
+    
+    # 如果单一压缩文件不存在或处理失败，按原来的逻辑处理每个文件
+    if not successfully_downloaded_files:
+        print(f"\n📄 按原始逻辑处理多个文件")
+        print("=" * 40)
         
-        # 读取原始文件
-        content = reader.read_task_file(task_type, task_id, filename, decompress)
-        
-        if content is not None:
-            print("✅ 原始文件读取成功!")
-            if isinstance(content, str):
-                print(f"📝 原始文件长度: {len(content)} 字符")
+        for filename in files_to_process:
+            print(f"\n📄 处理文件: {filename}")
+            print("-" * 40)
+            
+            if args.info_only:
+                # 显示原始文件信息
+                blob_path = f"compress/{task_type}/{task_id}/{filename}"
+                blob_info = reader.get_blob_info('download', blob_path)
+                
+                if blob_info:
+                    print(f"✅ 原始文件信息:")
+                    print(f"  📊 大小: {blob_info['size_mb']} MB")
+                    print(f"  📅 修改时间: {blob_info['last_modified']}")
+                    print(f"  🔗 URL: {blob_info['url']}")
+                else:
+                    print("❌ 原始文件不存在或获取信息失败")
+                continue
+            
+            # 读取原始文件
+            content = reader.read_task_file(task_type, task_id, filename, decompress)
+            
+            if content is not None:
+                print("✅ 原始文件读取成功!")
+                if isinstance(content, str):
+                    print(f"📝 原始文件长度: {len(content)} 字符")
+                else:
+                    print(f"📊 原始文件大小: {len(content)} 字节")
+                
+                # 保存原始文件
+                save_filename = _generate_save_filename(filename, task_id, args.output_type)
+                local_path = f"{args.save_dir}/{task_type}/{task_id}/{save_filename}"
+                
+                success = _save_content_to_file(content, local_path)
+                if success:
+                    print(f"💾 原始文件已保存到: {local_path}")
+                    successfully_downloaded_files.append(filename)
             else:
-                print(f"📊 原始文件大小: {len(content)} 字节")
-            
-            # 保存原始文件
-            save_filename = _generate_save_filename(filename, task_id, args.output_type)
-            local_path = f"{args.save_dir}/{task_type}/{task_id}/{save_filename}"
-            
-            success = _save_content_to_file(content, local_path)
-            if success:
-                print(f"💾 原始文件已保存到: {local_path}")
-                successfully_downloaded_files.append(filename)
-        else:
-            print("❌ 原始文件读取失败或文件不存在")
+                print("❌ 原始文件读取失败或文件不存在")
     
     # 如果优化方法没有成功获取解析文件，使用传统方法
     if not parse_file_downloaded and not args.info_only:
