@@ -751,11 +751,11 @@ def main():
     
     parser.add_argument('task_type_or_job_id', 
                        nargs='?',
-                       help='任务类型（如: AmazonListingJob）或解析模式下的job_id（如: SL2796867471）')
-    parser.add_argument('task_id_or_task_id', 
+                       help='任务类型（如: AmazonListingJob）或job_id（如: 2841227686 或 SL2796867471）')
+    parser.add_argument('task_id_or_output_type', 
                        nargs='?',
-                       help='任务ID（长数字串）或解析模式下的task_id')
-    parser.add_argument('output_type', 
+                       help='任务ID（长数字串）或输出类型（当第一个参数为job_id时）')
+    parser.add_argument('output_type_or_extra', 
                        nargs='?',
                        choices=['html', 'txt', 'json', 'raw'],
                        help='输出文件类型: html(自动解压), txt(自动解压), json(自动解压), raw(不解压)')
@@ -806,6 +806,55 @@ def main():
         show_task_mapping(args.save_dir)
         return
     
+    # 🆕 智能参数解析：自动检测是否为简化模式
+    is_smart_mode = False
+    actual_task_type = None
+    actual_task_id = None
+    actual_output_type = None
+    
+    # 检查第一个参数是否为纯数字（job_id模式）
+    if args.task_type_or_job_id and args.task_type_or_job_id.isdigit():
+        # 简化模式：python3 script.py 2841227686 html --with-parse
+        is_smart_mode = True
+        job_id = args.task_type_or_job_id
+        actual_output_type = args.task_id_or_output_type or 'html'
+        
+        print(f"🚀 智能模式：自动识别任务类型")
+        print(f"📋 Job ID: {job_id}")
+        print(f"📋 输出类型: {actual_output_type}")
+        print("🔍 正在查询任务类型...")
+        
+        # 查询任务类型
+        actual_task_type = get_task_type_by_job_id(job_id)
+        if not actual_task_type:
+            print(f"❌ 无法找到 job_id {job_id} 对应的任务类型")
+            return
+            
+        print(f"✅ 已识别任务类型: {actual_task_type}")
+        
+        # 转换为任务ID
+        if job_id.isdigit():
+            prefixed_job_id = f"SL{job_id}"
+        else:
+            prefixed_job_id = job_id
+            
+        actual_task_id = convert_job_id_to_task_id(prefixed_job_id)
+        if not actual_task_id:
+            print(f"❌ 无法找到对应的任务ID，请检查 job_id: {prefixed_job_id}")
+            return
+            
+        print(f"✅ 已获取任务ID: {actual_task_id}")
+        print("=" * 80)
+        
+        # 重新组织args对象以兼容现有逻辑
+        args.task_type_or_job_id = actual_task_type
+        args.task_id_or_task_id = actual_task_id
+        args.output_type = actual_output_type
+    else:
+        # 传统模式：python3 script.py AmazonListingJob 1234567890123456 html --with-parse
+        args.task_id_or_task_id = args.task_id_or_output_type
+        args.output_type = args.output_type_or_extra
+
     # 🆕 处理 --fetch-parse 模式
     if args.fetch_parse:
         if not args.task_type_or_job_id or not args.task_id_or_task_id:
@@ -853,10 +902,16 @@ def main():
     
     # 检查必需参数
     if not args.task_type_or_job_id or not args.task_id_or_task_id or not args.output_type:
-        parser.error("当不使用 --show-mapping 时，需要提供 task_type_or_job_id, task_id_or_task_id 和 output_type 参数")
+        if is_smart_mode:
+            parser.error("智能模式需要提供: job_id output_type [--with-parse]")
+        else:
+            parser.error("传统模式需要提供: task_type task_id output_type [--with-parse]")
     
     # 保存原始输入参数用于映射
-    original_input = args.task_id_or_task_id
+    if is_smart_mode:
+        original_input = job_id  # 智能模式使用job_id作为原始输入
+    else:
+        original_input = args.task_id_or_task_id
     
     # 检查解析模式的参数一致性
     if args.parse_mode and args.account != 'collector0109':
@@ -898,32 +953,37 @@ def main():
     
     # 原始模式处理
     # 第一步：验证和转换任务ID
-    print(f"🔍 Azure Storage 资源读取器")
-    print(f"📋 任务类型: {args.task_type_or_job_id}")
-    print(f"📋 输入参数: {args.task_id_or_task_id}")
+    if not is_smart_mode:
+        print(f"🔍 Azure Storage 资源读取器")
+        print(f"📋 任务类型: {args.task_type_or_job_id}")
+        print(f"📋 输入参数: {args.task_id_or_task_id}")
     
-    # 检查输入是否为有效的任务ID
-    if is_valid_task_id(args.task_id_or_task_id):
-        # 直接使用作为任务ID
-        task_id = args.task_id_or_task_id
-        print(f"✅ 检测到有效的任务ID: {task_id}")
+    # 智能模式已经完成了任务ID的转换，传统模式需要进行转换
+    if is_smart_mode:
+        task_id = actual_task_id
     else:
-        # 需要转换为任务ID
-        job_id = args.task_id_or_task_id
-        
-        # 如果是纯数字，添加SL前缀
-        if job_id.isdigit():
-            job_id = f"SL{job_id}"
-            print(f"🔄 添加SL前缀: {job_id}")
-        
-        print(f"🔍 通过数据库查询转换 job_id: {job_id}")
-        task_id = convert_job_id_to_task_id(job_id)
-        
-        if task_id is None:
-            print(f"❌ 无法找到对应的任务ID，请检查 job_id: {job_id}")
-            return
-        
-        print(f"✅ 查询成功，获得任务ID: {task_id}")
+        # 检查输入是否为有效的任务ID
+        if is_valid_task_id(args.task_id_or_task_id):
+            # 直接使用作为任务ID
+            task_id = args.task_id_or_task_id
+            print(f"✅ 检测到有效的任务ID: {task_id}")
+        else:
+            # 需要转换为任务ID
+            job_id = args.task_id_or_task_id
+            
+            # 如果是纯数字，添加SL前缀
+            if job_id.isdigit():
+                job_id = f"SL{job_id}"
+                print(f"🔄 添加SL前缀: {job_id}")
+            
+            print(f"🔍 通过数据库查询转换 job_id: {job_id}")
+            task_id = convert_job_id_to_task_id(job_id)
+            
+            if task_id is None:
+                print(f"❌ 无法找到对应的任务ID，请检查 job_id: {job_id}")
+                return
+            
+            print(f"✅ 查询成功，获得任务ID: {task_id}")
     
     print(f"📁 路径结构: {args.account if hasattr(args, 'account') else 'yiya0110'}/{args.task_type_or_job_id}/{task_id}/")
     print("=" * 80)
@@ -1271,6 +1331,161 @@ def is_valid_task_id(task_id: str) -> bool:
     return re.match(r'^\d{18,20}$', task_id) is not None
 
 
+def map_db_task_type_to_system_type(db_task_type: str) -> str:
+    """
+    将数据库中的任务类型映射到系统使用的任务类型
+    
+    Args:
+        db_task_type: 数据库中的任务类型，如 'amazon_product', 'amazon_review'
+        
+    Returns:
+        str: 系统使用的任务类型，如 'AmazonListingJob', 'AmazonReviewStarJob'
+    """
+    mapping = {
+        'amazon_product': 'AmazonListingJob',
+        'amazon_review': 'AmazonReviewStarJob',
+        'amazon_listing': 'AmazonListingJob',
+        'amazon_review_star': 'AmazonReviewStarJob'
+    }
+    
+    return mapping.get(db_task_type.lower(), db_task_type)
+
+
+def get_task_type_by_job_id(job_id: str) -> Optional[str]:
+    """
+    通过数据库查询获取任务类型
+    
+    Args:
+        job_id: 请求序列号，如 'SL2796867471' 或 '2796867471'
+        
+    Returns:
+        Optional[str]: 找到的任务类型 (type)，未找到返回None
+    """
+    # 如果是纯数字，添加SL前缀
+    if job_id.isdigit():
+        job_id = f"SL{job_id}"
+    
+    # 创建数据库连接
+    db_config = DB_CONFIG.copy()
+    db_config['database'] = 'shulex_collector_prod'
+    
+    db = DatabaseConnector(db_config)
+    if not db.connect():
+        logger.error("无法连接到数据库 shulex_collector_prod")
+        return None
+    
+    try:
+        # 定义要查询的表
+        tables_to_check = ['log_a', 'log_b', 'log_c', 'log_d']
+        
+        logger.info(f"正在查询 job_id: {job_id} 的任务类型")
+        
+        all_results = []
+        
+        # 查询各个表
+        for table_name in tables_to_check:
+            query = f"SELECT type FROM {table_name} WHERE req_ssn = %s"
+            try:
+                records = db.execute_query(query, (job_id,))
+                if records:
+                    all_results.extend(records)
+                    logger.info(f"在表 {table_name} 中找到 {len(records)} 条记录")
+                    
+            except Exception as e:
+                logger.error(f"查询表 {table_name} 失败: {str(e)}")
+        
+        # 分析查询结果
+        if len(all_results) == 0:
+            logger.warning(f"在所有表中都没有找到 job_id: {job_id}")
+            return None
+            
+        # 获取唯一的任务类型
+        unique_types = set()
+        for record in all_results:
+            task_type = record.get('type', '')
+            if task_type:
+                unique_types.add(task_type)
+        
+        if len(unique_types) == 1:
+            db_task_type = list(unique_types)[0]
+            # 映射到系统使用的任务类型
+            system_task_type = map_db_task_type_to_system_type(db_task_type)
+            logger.info(f"找到任务类型: {db_task_type} -> {system_task_type}")
+            return system_task_type
+        elif len(unique_types) > 1:
+            logger.warning(f"找到多个任务类型: {unique_types}，返回第一个")
+            db_task_type = list(unique_types)[0]
+            system_task_type = map_db_task_type_to_system_type(db_task_type)
+            return system_task_type
+        else:
+            logger.warning(f"找到记录但任务类型为空")
+            return None
+    
+    finally:
+        db.disconnect()
+
+
+def convert_task_id_to_job_id(task_id: str) -> Optional[str]:
+    """
+    反向查询：通过task_id获取对应的job_id（req_ssn）
+    
+    Args:
+        task_id: 任务ID
+        
+    Returns:
+        Optional[str]: 对应的job_id，如果找不到则返回None
+    """
+    try:
+        # 导入数据库配置并指定数据库
+        from config.db_config import DB_CONFIG
+        config_with_db = DB_CONFIG.copy()
+        config_with_db['database'] = 'shulex_collector_prod'
+        
+        # 使用数据库连接器查询
+        db = DatabaseConnector(config_with_db)
+        
+        # 确保连接成功
+        if not db.connect():
+            logger.error("反向查询: 数据库连接失败")
+            return None
+        
+        # 查询所有可能的表
+        tables = ['log_a', 'log_b', 'log_c', 'log_d']
+        logger.info(f"正在反向查询 task_id: {task_id} 对应的 job_id")
+        
+        for table in tables:
+            query = f"""
+            SELECT req_ssn 
+            FROM {table} 
+            WHERE ext_ssn = %s 
+            LIMIT 1
+            """
+            
+            result = db.execute_query(query, (task_id,))
+            
+            if result and len(result) > 0:
+                job_id = str(result[0]['req_ssn'])
+                logger.info(f"在表 {table} 中找到对应的 job_id: {job_id}")
+                
+                # 如果job_id以SL开头，去掉SL前缀返回原始的req_ssn
+                if job_id.startswith('SL') and job_id[2:].isdigit():
+                    original_job_id = job_id[2:]
+                    logger.info(f"去掉SL前缀，返回原始 job_id: {original_job_id}")
+                    db.disconnect()
+                    return original_job_id
+                else:
+                    db.disconnect()
+                    return job_id
+        
+        logger.warning(f"在所有表中都没有找到 task_id: {task_id} 对应的 job_id")
+        db.disconnect()
+        return None
+        
+    except Exception as e:
+        logger.error(f"反向查询失败: {str(e)}")
+        return None
+
+
 def convert_job_id_to_task_id(job_id: str) -> Optional[str]:
     """
     通过数据库查询将 job_id 转换为 task_id
@@ -1366,56 +1581,83 @@ def get_default_files_for_task_type(task_type: str) -> List[str]:
 
 
 def update_task_mapping(input_param: str, task_type: str, actual_task_id: str, 
-                       save_dir: str = 'data/output') -> bool:
+                       save_dir: str = 'data/output', **kwargs) -> bool:
     """
-    更新任务映射文件，记录输入参数到实际下载路径的映射
+    更新任务映射记录到本地数据库（仅使用数据库）
     
     Args:
         input_param: 用户输入的参数（task_id或job_id）
         task_type: 任务类型
         actual_task_id: 实际的任务ID
         save_dir: 保存目录
+        **kwargs: 其他可选参数
         
     Returns:
         bool: 更新成功返回True
     """
     try:
-        # 映射文件路径
-        map_file_path = f"{save_dir}/task_mapping.json"
+        from src.db.local_connector import LocalDatabaseConnector
         
-        # 读取现有映射
-        mapping = {}
-        if os.path.exists(map_file_path):
-            try:
-                with open(map_file_path, 'r', encoding='utf-8') as f:
-                    mapping = json.load(f)
-            except (json.JSONDecodeError, FileNotFoundError):
-                logger.warning(f"映射文件格式错误或不存在，将创建新的映射文件")
-                mapping = {}
-        
-        # 生成相对路径
+        # 生成相对路径和完整路径
         relative_path = f"./{task_type}/{actual_task_id}/"
+        full_path = f"{save_dir}/{task_type}/{actual_task_id}/"
         
-        # 更新映射
-        mapping[input_param] = {
-            'relative_path': relative_path,
-            'task_type': task_type,
-            'actual_task_id': actual_task_id,
-            'last_updated': datetime.now().isoformat()
-        }
+        # 统计文件信息
+        file_count = 0
+        has_parse_file = False
+        files_info = []
         
-        # 确保目录存在
-        os.makedirs(save_dir, exist_ok=True)
+        if os.path.exists(full_path):
+            for file_path in Path(full_path).iterdir():
+                if file_path.is_file():
+                    file_count += 1
+                    file_type = 'parse' if file_path.name == 'parse_result.json' else 'original'
+                    if file_type == 'parse':
+                        has_parse_file = True
+                    
+                    files_info.append({
+                        'file_name': file_path.name,
+                        'file_type': file_type,
+                        'file_size': file_path.stat().st_size,
+                        'file_path': str(file_path),
+                        'download_success': True
+                    })
         
-        # 保存更新后的映射
-        with open(map_file_path, 'w', encoding='utf-8') as f:
-            json.dump(mapping, f, indent=2, ensure_ascii=False)
+        # 获取下载方式
+        download_method = kwargs.get('download_method', 'azure_storage')
+        status = kwargs.get('status', 'success')
         
-        logger.info(f"✅ 任务映射已更新: {input_param} -> {relative_path}")
-        return True
+        # 插入或更新数据库记录
+        db = LocalDatabaseConnector()
+        mapping_id = db.insert_task_mapping(
+            job_id=input_param,
+            task_type=task_type,
+            actual_task_id=actual_task_id,
+            relative_path=relative_path,
+            full_path=full_path,
+            file_count=file_count,
+            has_parse_file=has_parse_file,
+            download_method=download_method,
+            status=status
+        )
         
+        if mapping_id and files_info:
+            db.insert_file_details(mapping_id, files_info)
+        
+        db.disconnect()
+        
+        if mapping_id:
+            logger.info(f"✅ 任务映射已更新到数据库: {input_param} -> {relative_path} (ID: {mapping_id})")
+            return True
+        else:
+            logger.error(f"❌ 数据库更新失败: {input_param}")
+            return False
+            
+    except ImportError:
+        logger.error(f"❌ 本地数据库模块不可用，无法保存任务映射")
+        return False
     except Exception as e:
-        logger.error(f"❌ 更新任务映射失败: {str(e)}")
+        logger.error(f"❌ 数据库操作失败: {str(e)}")
         return False
 
 
@@ -1529,20 +1771,28 @@ def handle_with_parse_mode(args) -> None:
     print(f"📋 任务类型: {args.task_type_or_job_id}")
     print(f"📋 输入参数: {args.task_id_or_task_id}")
     
-    # 保存原始输入参数用于映射
-    original_input = args.task_id_or_task_id
-    
     # 第一步：验证和转换任务ID，同时获取analysis_response
     task_id = None
     analysis_response = None
     job_id = None
+    original_input = None  # 用于映射的原始job_id
     
     if is_valid_task_id(args.task_id_or_task_id):
-        # 直接使用作为任务ID
+        # 直接使用作为任务ID - 需要反向查询获取job_id
         task_id = args.task_id_or_task_id
         print(f"✅ 检测到有效的任务ID: {task_id}")
+        
+        # 通过task_id反向查询job_id（用于映射索引）
+        job_id_from_task = convert_task_id_to_job_id(task_id)
+        if job_id_from_task:
+            original_input = job_id_from_task
+            print(f"✅ 反向查询成功，映射索引使用 job_id: {original_input}")
+        else:
+            original_input = args.task_id_or_task_id
+            print(f"⚠️  反向查询失败，使用任务ID作为映射索引: {original_input}")
     else:
         # 需要转换为任务ID并获取analysis_response
+        original_input = args.task_id_or_task_id  # 保存原始输入的job_id用于映射
         job_id = args.task_id_or_task_id
         
         # 如果是纯数字，添加SL前缀
@@ -1551,6 +1801,7 @@ def handle_with_parse_mode(args) -> None:
             print(f"🔄 添加SL前缀: {job_id}")
         
         print(f"🔍 通过数据库查询转换 job_id: {job_id}")
+        print(f"📋 映射索引将使用原始job_id: {original_input}")
         
         # 🆕 尝试使用优化器获取task_id和analysis_response
         try:
@@ -2059,7 +2310,7 @@ def print_parse_mapping_info(original_input: str, job_id: str, task_id: str,
 def update_parse_mapping(original_input: str, job_id: str, task_id: str, 
                         save_dir: str = 'data/output') -> bool:
     """
-    更新解析文件映射
+    更新解析文件映射到数据库（仅使用数据库，parse文件暂不支持数据库存储）
     
     Args:
         original_input: 原始输入参数
@@ -2070,45 +2321,9 @@ def update_parse_mapping(original_input: str, job_id: str, task_id: str,
     Returns:
         bool: 更新成功返回True
     """
-    try:
-        # 映射文件路径
-        map_file_path = f"{save_dir}/task_mapping.json"
-        
-        # 读取现有映射
-        mapping = {}
-        if os.path.exists(map_file_path):
-            try:
-                with open(map_file_path, 'r', encoding='utf-8') as f:
-                    mapping = json.load(f)
-            except (json.JSONDecodeError, FileNotFoundError):
-                logger.warning(f"映射文件格式错误或不存在，将创建新的映射文件")
-                mapping = {}
-        
-        # 生成相对路径
-        relative_path = f"./parse/{job_id}/{task_id}/"
-        
-        # 更新映射
-        mapping[original_input] = {
-            'relative_path': relative_path,
-            'task_type': 'parse',
-            'job_id': job_id,
-            'task_id': task_id,
-            'last_updated': datetime.now().isoformat()
-        }
-        
-        # 确保目录存在
-        os.makedirs(save_dir, exist_ok=True)
-        
-        # 保存更新后的映射
-        with open(map_file_path, 'w', encoding='utf-8') as f:
-            json.dump(mapping, f, indent=2, ensure_ascii=False)
-        
-        logger.info(f"✅ 解析文件映射已更新: {original_input} -> {relative_path}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"❌ 更新解析文件映射失败: {str(e)}")
-        return False
+    logger.warning(f"⚠️  解析文件映射暂不支持数据库存储，将跳过映射更新: {original_input}")
+    logger.info(f"🔍 解析文件保存路径: {save_dir}/parse/{job_id}/{task_id}/")
+    return True  # 直接返回成功，不进行映射操作
 
 
 if __name__ == '__main__':

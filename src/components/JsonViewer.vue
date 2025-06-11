@@ -6,6 +6,7 @@
         :icon="DocumentCopy" 
         @click="copyJson"
         size="small"
+        :disabled="isEmpty"
       >
         复制
       </el-button>
@@ -14,13 +15,22 @@
         :icon="isExpanded ? 'Minus' : 'Plus'" 
         @click="toggleExpand"
         size="small"
+        :disabled="isEmpty"
       >
         {{ isExpanded ? '收缩' : '展开' }}
       </el-button>
     </div>
     
     <div class="json-content" :class="{ expanded: isExpanded }">
-      <pre><code>{{ formattedJson }}</code></pre>
+      <!-- 空数据状态 -->
+      <div v-if="isEmpty" class="empty-state">
+        <div class="empty-icon">📄</div>
+        <div class="empty-title">无JSON数据</div>
+        <div class="empty-description">此文件包含{{ emptyTypeDescription }}，没有可显示的内容</div>
+      </div>
+      
+      <!-- 正常JSON显示 -->
+      <pre v-else><code>{{ formattedJson }}</code></pre>
     </div>
   </div>
 </template>
@@ -66,6 +76,25 @@ const copyJson = async () => {
     ElMessage.error('复制失败')
   }
 }
+
+// 检测是否为空数据
+const isEmpty = computed(() => {
+  return formattedJson.value === null
+})
+
+// 获取空数据类型描述
+const emptyTypeDescription = computed(() => {
+  try {
+    const parsedData = typeof props.data === 'string' ? JSON.parse(props.data) : props.data
+    if (parsedData === "") return "空字符串"
+    if (parsedData === null) return "null值"
+    if (Array.isArray(parsedData) && parsedData.length === 0) return "空数组"
+    if (typeof parsedData === 'object' && Object.keys(parsedData).length === 0) return "空对象"
+    return "无数据"
+  } catch {
+    return "无效数据"
+  }
+})
 </script>
 
 <style scoped>
@@ -111,5 +140,35 @@ const copyJson = async () => {
   padding: 0;
   border-radius: 0;
   color: inherit;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: #909399;
+  min-height: 200px;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #606266;
+}
+
+.empty-description {
+  font-size: 14px;
+  color: #909399;
+  line-height: 1.4;
 }
 </style> 

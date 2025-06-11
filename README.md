@@ -33,12 +33,18 @@
 
 ### 环境要求
 - Python 3.9+
+- Node.js 16+
+- npm 或 yarn
 - Flask
 - 其他依赖见 `requirements.txt`
 
 ### 安装依赖
 ```bash
+# Python依赖
 pip install -r requirements.txt
+
+# Node.js依赖
+npm install
 ```
 
 ### 环境变量配置
@@ -64,12 +70,47 @@ AZURE_SUBSCRIPTION_ID=your_subscription_id
 AZURE_RESOURCE_GROUP=your_resource_group
 ```
 
-### 启动应用
+### ⏰ 一键重启服务
+
+我们提供了完整的服务管理脚本，确保100%成功启动：
+
 ```bash
-python3 web_app.py
+# 🚀 重启前后端服务（推荐）
+./restart.sh
+
+# ⏹️ 停止所有服务
+./stop.sh
+
+# 🔍 检查服务状态
+./status.sh
+
+# 📋 查看日志
+./logs.sh [backend|frontend|restart|all]
 ```
 
-访问地址：http://localhost:5001
+#### 🎯 重启脚本特性
+- **🔧 自动环境检查**: 验证Python虚拟环境、Node.js、依赖等
+- **🧹 智能端口清理**: 自动检测并清理占用的端口（5001、3000、3001）
+- **📦 依赖管理**: 自动检查和安装最新依赖
+- **🏥 健康检查**: 启动后自动验证服务是否正常响应
+- **📝 完整日志**: 详细的操作日志和错误提示
+- **🎨 美观界面**: 彩色输出和进度提示
+
+### 手动启动（不推荐）
+如果需要手动启动：
+
+```bash
+# 启动后端服务（终端1）
+python3 web_app.py
+
+# 启动前端服务（终端2）
+npm run dev
+```
+
+### 访问地址
+- **前端**: http://localhost:3000 或 http://localhost:3001
+- **后端**: http://localhost:5001
+- **API**: http://localhost:5001/api
 
 ## 使用指南
 
@@ -119,9 +160,14 @@ ankerTestValid/
 ├── data/                  # 数据目录
 │   └── output/            # 任务输出文件
 ├── docs/                  # 文档
+├── restart.sh             # 🚀 一键重启脚本
+├── stop.sh                # ⏹️ 停止服务脚本
+├── status.sh              # 🔍 状态检查脚本
+├── logs.sh                # 📋 日志查看脚本
 ├── .env                   # 环境变量（需要创建）
 ├── .env.example           # 环境变量模板
 ├── requirements.txt       # Python依赖
+├── package.json           # Node.js依赖
 └── README.md             # 项目说明
 ```
 
@@ -137,6 +183,7 @@ ankerTestValid/
 - **HTML5**: 页面结构
 - **CSS3**: 样式设计
 - **JavaScript**: 交互逻辑
+- **Vue.js**: 现代化前端框架（可选）
 - **Font Awesome**: 图标库
 
 ### 特色功能
@@ -161,6 +208,42 @@ ankerTestValid/
 - `AZURE_*`：兼容性变量名
 
 配置文件会自动选择可用的变量名。
+
+## 🔧 运维管理
+
+### 服务管理命令
+
+```bash
+# 🚀 重启所有服务
+./restart.sh
+
+# ⏹️ 停止所有服务  
+./stop.sh
+
+# 🔍 检查服务状态
+./status.sh
+
+# 📋 查看实时日志
+./logs.sh all          # 查看所有日志
+./logs.sh backend      # 仅查看后端日志
+./logs.sh frontend     # 仅查看前端日志
+./logs.sh restart      # 查看重启日志
+```
+
+### 日志文件位置
+
+- `restart.log` - 重启操作日志
+- `backend.log` - 后端服务日志
+- `frontend.log` - 前端服务日志
+- `.backend.pid` - 后端进程ID
+- `.frontend.pid` - 前端进程ID
+
+### 故障排除
+
+1. **端口被占用**：重启脚本会自动检测并清理占用的端口
+2. **依赖缺失**：重启脚本会自动检查并安装依赖
+3. **服务无法启动**：查看对应的日志文件排查问题
+4. **环境问题**：重启脚本会进行完整的环境检查
 
 ## 安全说明
 

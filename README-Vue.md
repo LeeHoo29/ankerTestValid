@@ -25,7 +25,32 @@
 - npm 或 yarn
 - Python 3.9+
 
-### 1. 安装前端依赖
+### ⏰ 一键重启服务（推荐）
+
+我们提供了完整的前后端重启解决方案：
+
+```bash
+# 🚀 一键重启前后端服务
+./restart.sh
+
+# ⏹️ 停止所有服务
+./stop.sh
+
+# 🔍 检查服务状态
+./status.sh
+
+# 📋 查看日志
+./logs.sh all
+```
+
+#### 🎯 自动化特性
+- **✅ 端口冲突处理**: 自动检测并清理占用的端口
+- **✅ 环境验证**: 检查Python虚拟环境和Node.js环境
+- **✅ 依赖管理**: 自动安装和更新依赖
+- **✅ 健康检查**: 服务启动后自动验证可用性
+- **✅ 完整日志**: 详细的操作日志和错误诊断
+
+### 手动安装（仅开发调试）
 
 ```bash
 # 使用自动化脚本（推荐）
@@ -36,7 +61,7 @@ chmod +x setup-vue.sh
 npm install
 ```
 
-### 2. 启动开发环境
+### 手动启动（仅开发调试）
 
 ```bash
 # 启动后端服务（终端1）
@@ -46,9 +71,9 @@ python3 web_app.py
 npm run dev
 ```
 
-### 3. 访问应用
+### 访问应用
 
-- **前端开发服务器**: http://localhost:3000
+- **前端开发服务器**: http://localhost:3000 或 http://localhost:3001
 - **后端API服务器**: http://localhost:5001
 
 ## 🏗️ 项目结构
@@ -73,6 +98,10 @@ npm run dev
 │   │   └── Tasks.vue       # 任务历史
 │   ├── App.vue             # 根组件
 │   └── main.js             # 入口文件
+├── restart.sh              # 🚀 一键重启脚本
+├── stop.sh                 # ⏹️ 停止服务脚本
+├── status.sh               # 🔍 状态检查脚本
+├── logs.sh                 # 📋 日志查看脚本
 ├── package.json            # 项目配置
 ├── vite.config.js          # Vite配置
 └── index.html              # HTML模板
@@ -111,6 +140,33 @@ npm run build
 # 预览生产版本
 npm run preview
 ```
+
+## 🔧 运维管理
+
+### 服务状态管理
+
+```bash
+# 🚀 重启服务（处理所有问题）
+./restart.sh
+
+# 🔍 快速状态检查
+./status.sh
+
+# 📋 查看不同类型日志
+./logs.sh backend    # 后端API日志
+./logs.sh frontend   # 前端构建日志
+./logs.sh restart    # 重启操作日志
+./logs.sh all        # 所有日志（推荐）
+```
+
+### 🚨 故障排除
+
+| 问题 | 解决方案 |
+|------|----------|
+| 端口被占用 | `./restart.sh` 会自动清理 |
+| 依赖缺失 | `./restart.sh` 会自动安装 |
+| 服务无响应 | 运行 `./status.sh` 诊断 |
+| 无法访问页面 | 检查 `./logs.sh frontend` |
 
 ## 🎯 核心功能
 
@@ -173,8 +229,14 @@ export default defineConfig({
 ## 🚀 部署说明
 
 ### 开发环境
-1. 启动后端: `python3 web_app.py`
-2. 启动前端: `npm run dev`
+```bash
+# 一键启动（推荐）
+./restart.sh
+
+# 或手动启动
+python3 web_app.py  # 后端
+npm run dev         # 前端
+```
 
 ### 生产环境
 1. 构建前端: `npm run build`

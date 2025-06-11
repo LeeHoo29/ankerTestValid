@@ -8,10 +8,18 @@ export const getCompletedTasks = () => {
   })
 }
 
+// 获取任务类型
+export const getTaskType = (taskId) => {
+  return request({
+    url: '/api/get_task_type',
+    method: 'get',
+    params: { task_id: taskId }
+  })
+}
+
 // 提交任务
 export const submitTask = (data) => {
   const formData = new FormData()
-  formData.append('task_type', data.task_type)
   formData.append('task_id', data.task_id)
   formData.append('output_type', data.output_type)
   if (data.use_parse) {
@@ -78,5 +86,21 @@ export const clearTasks = () => {
   return request({
     url: '/clear_tasks',
     method: 'post'
+  })
+}
+
+// 删除任务
+export const deleteTask = (jobId) => {
+  return request({
+    url: `/api/delete_task/${jobId}`,
+    method: 'delete'
+  })
+}
+
+// 获取任务详情
+export const getTaskDetail = (jobId) => {
+  return request({
+    url: `/api/task_detail/${jobId}`,
+    method: 'get'
   })
 } 

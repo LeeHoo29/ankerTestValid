@@ -134,9 +134,24 @@ dmypy.json
 ehthumbs.db
 Thumbs.db
 
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
 # Project specific
 data/output/
 data/input/
 temp/
 *.log
-config/secret_* 
+config/secret_*
+
+# 重启脚本生成的文件
+restart.log
+backend.log
+frontend.log
+.backend.pid
+.frontend.pid 

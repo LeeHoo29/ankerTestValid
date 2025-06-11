@@ -18,6 +18,35 @@ from pathlib import Path
 import uuid
 import logging
 
+# 配置日志系统
+def setup_logger():
+    """设置应用程序日志配置"""
+    # 创建logs目录（如果不存在）
+    log_dir = Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    
+    # 配置日志格式
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    
+    # 配置根logger
+    logging.basicConfig(
+        level=logging.INFO,
+        format=log_format,
+        handlers=[
+            # 控制台输出
+            logging.StreamHandler(),
+            # 文件输出
+            logging.FileHandler(log_dir / 'web_app.log', encoding='utf-8')
+        ]
+    )
+    
+    # 创建应用专用logger
+    logger = logging.getLogger('web_app')
+    return logger
+
+# 初始化logger
+logger = setup_logger()
+
 # 导入数据库连接器和配置
 from src.db.connector import DatabaseConnector
 from config.db_config import DB_CONFIG
@@ -25,6 +54,14 @@ from config.task_statistics_config import (
     DATABASE_TABLES, TASK_TYPES, TENANT_CONFIG, 
     get_sql_template, get_all_tenant_ids, TASK_STATISTICS_CONFIG
 )
+
+# 添加本地数据库连接器导入
+try:
+    from src.db.local_connector import LocalDatabaseConnector
+    LOCAL_DB_AVAILABLE = True
+except ImportError:
+    LOCAL_DB_AVAILABLE = False
+    logger.warning("⚠️  本地数据库模块不可用，部分功能将被禁用")
 
 app = Flask(__name__)
 app.secret_key = 'azure_resource_reader_web_2024'
@@ -143,51 +180,54 @@ def format_timestamp(iso_timestamp):
         return iso_timestamp
 
 def read_completed_tasks():
-    """读取已完成任务的映射文件"""
-    mapping_file = Path('data/output/task_mapping.json')
-    
-    if not mapping_file.exists():
-        return []
-    
+    """读取已完成任务（仅从数据库获取）"""
     try:
-        with open(mapping_file, 'r', encoding='utf-8') as f:
-            mapping_data = json.load(f)
+        if not LOCAL_DB_AVAILABLE:
+            logger.warning("本地数据库不可用，返回空任务列表")
+            return []
+        
+        db = LocalDatabaseConnector()
+        
+        # 获取所有任务映射
+        cursor = db.cursor
+        query = """
+            SELECT job_id, task_type, actual_task_id, relative_path, 
+                   full_path, file_count, has_parse_file, 
+                   download_method, status, created_at, updated_at
+            FROM task_mapping 
+            ORDER BY updated_at DESC
+        """
+        cursor.execute(query)
+        mappings = cursor.fetchall()
         
         completed_tasks = []
-        for job_id, task_info in mapping_data.items():
-            # 检查任务目录是否存在
-            relative_path = task_info.get('relative_path', '')
+        for mapping in mappings:
+            # 检查目录是否存在
+            full_path = Path(mapping['full_path']) if mapping['full_path'] else None
+            directory_exists = full_path.exists() if full_path else False
+            
+            # 格式化相对路径
+            relative_path = mapping['relative_path']
             if relative_path.startswith('./'):
                 relative_path = relative_path[2:]
             
-            full_path = Path('data/output') / relative_path
-            
-            # 统计文件数量
-            file_count = 0
-            has_parse_file = False
-            if full_path.exists():
-                files = [f for f in full_path.iterdir() if f.is_file()]
-                file_count = len(files)
-                has_parse_file = any(f.name == 'parse_result.json' for f in files)
-            
             completed_tasks.append({
-                'job_id': job_id,
-                'task_type': task_info.get('task_type', 'Unknown'),
-                'actual_task_id': task_info.get('actual_task_id', ''),
-                'last_updated': format_timestamp(task_info.get('last_updated', '')),
+                'job_id': mapping['job_id'],
+                'task_type': mapping['task_type'],
+                'actual_task_id': mapping['actual_task_id'],
+                'last_updated': format_timestamp(mapping['updated_at'].isoformat() if mapping['updated_at'] else ''),
                 'relative_path': relative_path,
-                'full_path': str(full_path),
-                'file_count': file_count,
-                'has_parse_file': has_parse_file,
-                'directory_exists': full_path.exists()
+                'full_path': str(full_path) if full_path else '',
+                'file_count': mapping['file_count'],
+                'has_parse_file': mapping['has_parse_file'],
+                'directory_exists': directory_exists
             })
         
-        # 按最后更新时间倒序排列
-        completed_tasks.sort(key=lambda x: x['last_updated'], reverse=True)
+        db.disconnect()
         return completed_tasks
         
-    except (json.JSONDecodeError, FileNotFoundError) as e:
-        print(f"读取任务映射文件失败: {e}")
+    except Exception as e:
+        logger.warning(f"读取任务失败: {str(e)}")
         return []
 
 @app.route('/')
@@ -198,13 +238,88 @@ def index():
 
 @app.route('/api/completed_tasks')
 def get_completed_tasks():
-    """获取已完成任务的API接口"""
-    completed_tasks = read_completed_tasks()
-    return jsonify({
-        'success': True,
-        'tasks': completed_tasks,
-        'total_count': len(completed_tasks)
-    })
+    """获取已完成任务的API接口（仅从数据库获取）"""
+    logger.info("📥 收到获取已完成任务列表请求")
+    try:
+        if not LOCAL_DB_AVAILABLE:
+            logger.warning("本地数据库不可用")
+            return jsonify({
+                'success': False,
+                'error': '本地数据库不可用',
+                'tasks': [],
+                'total_count': 0
+            }), 500
+        
+        db = LocalDatabaseConnector()
+        
+        # 确保数据库连接成功
+        if not db.connect():
+            logger.warning("数据库连接失败")
+            return jsonify({
+                'success': False,
+                'error': '数据库连接失败',
+                'tasks': [],
+                'total_count': 0
+            }), 500
+        
+        # 获取所有任务映射
+        cursor = db.cursor
+        if cursor is None:
+            logger.warning("获取数据库游标失败")
+            db.disconnect()
+            return jsonify({
+                'success': False,
+                'error': '获取数据库游标失败',
+                'tasks': [],
+                'total_count': 0
+            }), 500
+            
+        query = """
+            SELECT job_id, task_type, actual_task_id, relative_path, 
+                   full_path, file_count, has_parse_file, 
+                   download_method, status, created_at, updated_at
+            FROM task_mapping 
+            ORDER BY updated_at DESC
+        """
+        cursor.execute(query)
+        mappings = cursor.fetchall()
+        
+        tasks = []
+        for mapping in mappings:
+            task = {
+                'job_id': mapping['job_id'],
+                'task_type': mapping['task_type'],
+                'actual_task_id': mapping['actual_task_id'],
+                'relative_path': mapping['relative_path'],
+                'full_path': mapping['full_path'],
+                'file_count': mapping['file_count'],
+                'has_parse_file': mapping['has_parse_file'],
+                'download_method': mapping['download_method'],
+                'status': mapping['status'],
+                'last_updated': mapping['updated_at'].isoformat() if mapping['updated_at'] else None,
+                'created_at': mapping['created_at'].isoformat() if mapping['created_at'] else None,
+                'directory_exists': True  # 兼容前端字段
+            }
+            tasks.append(task)
+        
+        db.disconnect()
+        
+        logger.info(f"✅ 成功返回 {len(tasks)} 个已完成任务")
+        return jsonify({
+            'success': True,
+            'tasks': tasks,
+            'total_count': len(tasks),
+            'source': 'database'
+        })
+        
+    except Exception as e:
+        logger.error(f"获取已完成任务失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'tasks': [],
+            'total_count': 0
+        }), 500
 
 @app.route('/api/list_files')
 def list_files():
@@ -296,32 +411,97 @@ def get_file_content():
         # 根据文件类型读取内容
         file_ext = path.suffix.lower()
         
+        def read_file_with_encoding_detection(file_path):
+            """智能读取文件，自动检测编码"""
+            # 尝试多种编码方式读取文件
+            encodings_to_try = ['utf-8', 'shift_jis', 'gbk', 'big5', 'iso-8859-1', 'cp1252']
+            content = None
+            used_encoding = None
+            
+            for encoding in encodings_to_try:
+                try:
+                    with open(file_path, 'r', encoding=encoding) as f:
+                        content = f.read()
+                        used_encoding = encoding
+                        break
+                except UnicodeDecodeError:
+                    continue
+            
+            if content is None:
+                # 如果所有编码都失败，尝试二进制模式读取
+                try:
+                    with open(file_path, 'rb') as f:
+                        raw_data = f.read()
+                        # 尝试自动检测编码
+                        try:
+                            import chardet
+                            detected = chardet.detect(raw_data)
+                            if detected['encoding'] and detected['confidence'] > 0.7:
+                                content = raw_data.decode(detected['encoding'])
+                                used_encoding = f"{detected['encoding']} (detected)"
+                        except ImportError:
+                            pass
+                        
+                        # 如果检测失败，使用UTF-8并忽略错误
+                        if content is None:
+                            content = raw_data.decode('utf-8', errors='ignore')
+                            used_encoding = 'utf-8 (with errors ignored)'
+                except Exception:
+                    raise Exception('无法读取文件内容')
+            
+            return content, used_encoding
+        
         if file_ext in ['.html', '.htm']:
-            with open(path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content, encoding = read_file_with_encoding_detection(path)
             return jsonify({
                 'success': True,
                 'content': content,
                 'type': 'html',
-                'filename': path.name
+                'filename': path.name,
+                'encoding': encoding
             })
         elif file_ext == '.json':
-            with open(path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content, encoding = read_file_with_encoding_detection(path)
+            
+            # 检测JSON内容是否为空或无意义
+            is_empty_json = False
+            empty_json_type = None
+            
+            try:
+                parsed_content = json.loads(content)
+                # 检测各种"空"情况
+                if parsed_content == "":
+                    is_empty_json = True
+                    empty_json_type = "empty_string"
+                elif parsed_content == {}:
+                    is_empty_json = True
+                    empty_json_type = "empty_object"
+                elif parsed_content == []:
+                    is_empty_json = True
+                    empty_json_type = "empty_array"
+                elif parsed_content is None:
+                    is_empty_json = True
+                    empty_json_type = "null"
+            except json.JSONDecodeError:
+                pass
+            
             return jsonify({
                 'success': True,
                 'content': content,
                 'type': 'json',
-                'filename': path.name
+                'filename': path.name,
+                'encoding': encoding,
+                'is_empty_json': is_empty_json,
+                'empty_json_type': empty_json_type
             })
         elif file_ext == '.txt':
-            with open(path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content, encoding = read_file_with_encoding_detection(path)
             return jsonify({
                 'success': True,
                 'content': content,
                 'type': 'text',
-                'filename': path.name
+                'filename': path.name,
+                'encoding': encoding
             })
         else:
             return jsonify({'success': False, 'error': '不支持的文件类型'})
@@ -368,24 +548,32 @@ def submit_command():
     """提交命令执行"""
     try:
         # 获取表单数据
-        task_type = request.form.get('task_type', '').strip()
         task_id_input = request.form.get('task_id', '').strip()
         output_type = request.form.get('output_type', 'html')
         use_parse = request.form.get('use_parse') == 'on'
         
         # 验证输入
-        if not task_type or not task_id_input:
+        if not task_id_input:
             return jsonify({
                 'success': False,
-                'error': '请填写任务类型和任务ID'
+                'error': '请填写任务ID'
             })
         
-        # 构建命令
+        # 自动获取任务类型
+        from src.azure_resource_reader import get_task_type_by_job_id
+        task_type = get_task_type_by_job_id(task_id_input)
+        
+        if not task_type:
+            return jsonify({
+                'success': False,
+                'error': f'无法找到任务ID {task_id_input} 对应的任务类型，请检查任务ID是否正确'
+            })
+        
+        # 构建智能模式命令（直接使用job_id，让脚本自动识别任务类型）
         command_parts = [
             'python3',
             'src/azure_resource_reader.py',
-            task_type,
-            task_id_input,
+            task_id_input,  # 直接使用job_id
             output_type
         ]
         
@@ -490,38 +678,72 @@ def clear_tasks():
     tasks = {}
     return jsonify({'success': True})
 
-@app.route('/api/check_task_exists')
-def check_task_exists():
-    """检查任务ID是否已存在"""
+@app.route('/api/get_task_type')
+def get_task_type():
+    """根据任务ID获取任务类型"""
     try:
         task_id = request.args.get('task_id')
         if not task_id:
             return jsonify({'success': False, 'error': '缺少任务ID参数'})
         
-        mapping_file = Path('data/output/task_mapping.json')
+        # 导入函数
+        from src.azure_resource_reader import get_task_type_by_job_id
         
-        if not mapping_file.exists():
+        # 查询任务类型
+        task_type = get_task_type_by_job_id(task_id)
+        
+        if task_type:
             return jsonify({
-                'success': True, 
-                'exists': False,
+                'success': True,
+                'task_type': task_type,
+                'task_id': task_id
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'未找到任务ID {task_id} 对应的任务类型',
                 'task_id': task_id
             })
         
-        with open(mapping_file, 'r', encoding='utf-8') as f:
-            mapping_data = json.load(f)
+    except Exception as e:
+        return jsonify({
+            'success': False, 
+            'error': f'查询任务类型时出错: {str(e)}'
+        })
+
+@app.route('/api/check_task_exists')
+def check_task_exists():
+    """检查任务ID是否已存在（仅使用数据库）"""
+    try:
+        task_id = request.args.get('task_id')
+        if not task_id:
+            return jsonify({'success': False, 'error': '缺少任务ID参数'})
+        
+        if not LOCAL_DB_AVAILABLE:
+            return jsonify({
+                'success': True, 
+                'exists': False,
+                'task_id': task_id,
+                'message': '数据库不可用，无法检查任务'
+            })
+        
+        db = LocalDatabaseConnector()
+        mapping = db.get_task_mapping_by_job_id(task_id)
+        db.disconnect()
         
         # 检查任务ID是否存在
-        exists = task_id in mapping_data
-        task_info = mapping_data.get(task_id, {}) if exists else {}
+        exists = mapping is not None
+        task_info = mapping if exists else {}
         
         return jsonify({
             'success': True,
             'exists': exists,
             'task_id': task_id,
-            'task_info': task_info
+            'task': task_info  # 与前端期望的字段名保持一致
         })
         
     except Exception as e:
+        logger.warning(f"检查任务存在性失败: {str(e)}")
         return jsonify({
             'success': False, 
             'error': f'检查任务时出错: {str(e)}'
@@ -610,7 +832,7 @@ def get_statistics_data():
             db.disconnect()
             
     except Exception as e:
-        logging.error(f"获取统计数据失败: {str(e)}")
+        logger.error(f"获取统计数据失败: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
 
@@ -938,7 +1160,7 @@ def get_statistics_summary():
             db.disconnect()
             
     except Exception as e:
-        logging.error(f"获取汇总数据失败: {str(e)}")
+        logger.error(f"获取汇总数据失败: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
 
@@ -1170,7 +1392,7 @@ def get_statistics_details():
                 # 执行查询
                 connector = DatabaseConnector(db_config)
                 if not connector.connect():
-                    print(f"数据库连接失败: {table}")
+                    logger.warning(f"数据库连接失败: {table}")
                     continue
                 
                 results = connector.execute_query(sql, params)
@@ -1232,7 +1454,7 @@ def get_statistics_details():
                 connector.disconnect()
                     
             except Exception as e:
-                print(f"查询表 {table} 详细数据失败: {str(e)}")
+                logger.warning(f"查询表 {table} 详细数据失败: {str(e)}")
                 debug_info[-1]['error'] = str(e)
                 continue
         
@@ -1256,7 +1478,7 @@ def get_statistics_details():
         })
         
     except Exception as e:
-        logging.error(f"获取统计详细数据失败: {str(e)}")
+        logger.error(f"获取统计详细数据失败: {str(e)}")
         return jsonify({
             'success': False,
             'message': f'获取详细数据失败: {str(e)}'
@@ -1299,7 +1521,7 @@ def should_show_recrawl_button(status, result_data):
         return False
         
     except (json.JSONDecodeError, TypeError, AttributeError) as e:
-        print(f"⚠️ 解析result数据失败: {e}")
+        logger.warning(f"⚠️ 解析result数据失败: {e}")
         return False
 
 
@@ -1365,8 +1587,7 @@ def resubmit_crawler():
         job_id = f"SL{req_ssn}" if not req_ssn.startswith('SL') else req_ssn
         command = f"python3 src/main.py resubmit_crawler_jobs --job-ids {job_id}"
         
-        print(f"🔄 执行重爬命令: {command}")
-        logging.info(f"执行重爬命令: {command} (req_ssn: {req_ssn})")
+        logger.info(f"🔄 执行重爬命令: {command} (req_ssn: {req_ssn})")
         
         # 异步执行命令
         def run_resubmit_command():
@@ -1391,17 +1612,15 @@ def resubmit_crawler():
                     if output:
                         line = output.strip()
                         output_lines.append(line)
-                        print(f"📝 重爬输出: {line}")
+                        logger.info(f"📝 重爬输出: {line}")
                 
                 return_code = process.poll()
                 
                 final_output = '\n'.join(output_lines)
                 success = return_code == 0
                 
-                print(f"✅ 重爬命令完成，返回码: {return_code}")
-                print(f"📋 完整输出:\n{final_output}")
-                
-                logging.info(f"重爬命令完成 - req_ssn: {req_ssn}, 返回码: {return_code}, 输出: {final_output}")
+                logger.info(f"✅ 重爬命令完成，返回码: {return_code}")
+                logger.info(f"📋 完整输出:\n{final_output}")
                 
                 return {
                     'success': success,
@@ -1413,8 +1632,7 @@ def resubmit_crawler():
                 
             except Exception as e:
                 error_msg = f"执行重爬命令时出错: {str(e)}"
-                print(f"❌ {error_msg}")
-                logging.error(error_msg)
+                logger.error(error_msg)
                 return {
                     'success': False,
                     'error': error_msg,
@@ -1437,22 +1655,476 @@ def resubmit_crawler():
         
     except Exception as e:
         error_msg = f"提交重爬任务失败: {str(e)}"
-        print(f"❌ {error_msg}")
-        logging.error(error_msg)
+        logger.error(error_msg)
         return jsonify({
             'success': False,
             'message': error_msg
         }), 500
 
 
+@app.route('/api/task_mappings', methods=['GET'])
+def get_task_mappings():
+    """
+    获取任务映射记录（优先从数据库，备用JSON文件）
+    支持分页和搜索
+    """
+    try:
+        # 获取查询参数
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 50))
+        search = request.args.get('search', '').strip()
+        
+        # 🆕 优先尝试从数据库获取
+        if LOCAL_DB_AVAILABLE:
+            try:
+                db = LocalDatabaseConnector()
+                offset = (page - 1) * per_page
+                
+                if search:
+                    # 简单的搜索实现（在job_id和task_type中搜索）
+                    # 这里简化处理，实际可以扩展更复杂的搜索逻辑
+                    mappings = []
+                    all_mappings = db.get_all_task_mappings(limit=1000, offset=0)
+                    for mapping in all_mappings:
+                        if (search.lower() in mapping.get('job_id', '').lower() or 
+                            search.lower() in mapping.get('task_type', '').lower()):
+                            mappings.append(mapping)
+                    
+                    # 手动分页
+                    total = len(mappings)
+                    mappings = mappings[offset:offset + per_page]
+                else:
+                    mappings = db.get_all_task_mappings(limit=per_page, offset=offset)
+                    # 这里应该也查询总数，简化处理
+                    total = len(mappings) + offset  # 简化的总数估算
+                
+                db.disconnect()
+                
+                # 为每个映射添加文件详情
+                for mapping in mappings:
+                    mapping_id = mapping.get('id')
+                    if mapping_id:
+                        db = LocalDatabaseConnector()
+                        file_details = db.get_file_details_by_mapping_id(mapping_id)
+                        mapping['files'] = file_details
+                        db.disconnect()
+                
+                return jsonify({
+                    'success': True,
+                    'data': mappings,
+                    'pagination': {
+                        'page': page,
+                        'per_page': per_page,
+                        'total': total,
+                        'pages': (total + per_page - 1) // per_page
+                    },
+                    'source': 'database'
+                })
+                
+            except Exception as db_error:
+                logger.warning(f"数据库查询失败，回退到JSON文件: {str(db_error)}")
+        
+        # 🔄 回退到JSON文件
+        mapping_file = 'data/output/task_mapping.json'
+        if not os.path.exists(mapping_file):
+            return jsonify({
+                'success': True,
+                'data': [],
+                'pagination': {
+                    'page': page,
+                    'per_page': per_page,
+                    'total': 0,
+                    'pages': 0
+                },
+                'source': 'json_file'
+            })
+        
+        with open(mapping_file, 'r', encoding='utf-8') as f:
+            mapping_data = json.load(f)
+        
+        # 转换为列表格式并添加文件统计
+        mappings = []
+        for job_id, info in mapping_data.items():
+            if search and search.lower() not in job_id.lower() and search.lower() not in info.get('task_type', '').lower():
+                continue
+                
+            # 统计文件信息
+            relative_path = info.get('relative_path', '')
+            if relative_path.startswith('./'):
+                full_path = f"data/output/{relative_path[2:]}"
+            else:
+                full_path = f"data/output/{relative_path}"
+            
+            file_count = 0
+            has_parse_file = False
+            if os.path.exists(full_path):
+                files = [f for f in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, f))]
+                file_count = len(files)
+                has_parse_file = 'parse_result.json' in files
+            
+            mapping = {
+                'job_id': job_id,
+                'task_type': info.get('task_type', ''),
+                'actual_task_id': info.get('actual_task_id', ''),
+                'relative_path': relative_path,
+                'full_path': full_path,
+                'file_count': file_count,
+                'has_parse_file': has_parse_file,
+                'status': 'success',
+                'last_updated': info.get('last_updated', ''),
+                'source': 'json_file'
+            }
+            mappings.append(mapping)
+        
+        # 排序（按最后更新时间倒序）
+        mappings.sort(key=lambda x: x.get('last_updated', ''), reverse=True)
+        
+        # 分页
+        total = len(mappings)
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        mappings = mappings[start_idx:end_idx]
+        
+        return jsonify({
+            'success': True,
+            'data': mappings,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total': total,
+                'pages': (total + per_page - 1) // per_page
+            },
+            'source': 'json_file'
+        })
+        
+    except Exception as e:
+        logger.error(f"获取任务映射失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/task_mapping/<job_id>', methods=['GET'])
+def get_task_mapping_detail(job_id):
+    """
+    获取单个任务映射的详细信息
+    """
+    try:
+        # 🆕 优先尝试从数据库获取
+        if LOCAL_DB_AVAILABLE:
+            try:
+                db = LocalDatabaseConnector()
+                mapping = db.get_task_mapping_by_job_id(job_id)
+                
+                if mapping:
+                    # 获取文件详情
+                    file_details = db.get_file_details_by_mapping_id(mapping['id'])
+                    mapping['files'] = file_details
+                    mapping['source'] = 'database'
+                    
+                    db.disconnect()
+                    return jsonify({
+                        'success': True,
+                        'data': mapping
+                    })
+                
+                db.disconnect()
+                
+            except Exception as db_error:
+                logger.warning(f"数据库查询失败，回退到JSON文件: {str(db_error)}")
+        
+        # 🔄 回退到JSON文件
+        mapping_file = 'data/output/task_mapping.json'
+        if not os.path.exists(mapping_file):
+            return jsonify({
+                'success': False,
+                'error': '任务映射文件不存在'
+            }), 404
+        
+        with open(mapping_file, 'r', encoding='utf-8') as f:
+            mapping_data = json.load(f)
+        
+        if job_id not in mapping_data:
+            return jsonify({
+                'success': False,
+                'error': '任务映射不存在'
+            }), 404
+        
+        info = mapping_data[job_id]
+        
+        # 统计文件信息
+        relative_path = info.get('relative_path', '')
+        if relative_path.startswith('./'):
+            full_path = f"data/output/{relative_path[2:]}"
+        else:
+            full_path = f"data/output/{relative_path}"
+        
+        files = []
+        if os.path.exists(full_path):
+            for filename in os.listdir(full_path):
+                file_path = os.path.join(full_path, filename)
+                if os.path.isfile(file_path):
+                    file_type = 'parse' if filename == 'parse_result.json' else 'original'
+                    files.append({
+                        'file_name': filename,
+                        'file_type': file_type,
+                        'file_size': os.path.getsize(file_path),
+                        'file_path': file_path
+                    })
+        
+        mapping = {
+            'job_id': job_id,
+            'task_type': info.get('task_type', ''),
+            'actual_task_id': info.get('actual_task_id', ''),
+            'relative_path': relative_path,
+            'full_path': full_path,
+            'file_count': len(files),
+            'has_parse_file': any(f['file_name'] == 'parse_result.json' for f in files),
+            'status': 'success',
+            'last_updated': info.get('last_updated', ''),
+            'files': files,
+            'source': 'json_file'
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': mapping
+        })
+        
+    except Exception as e:
+        logger.error(f"获取任务映射详情失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/database_status', methods=['GET'])
+def get_database_status():
+    """
+    获取数据库状态信息
+    """
+    try:
+        if not LOCAL_DB_AVAILABLE:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'available': False,
+                    'reason': '本地数据库模块不可用'
+                }
+            })
+        
+        db = LocalDatabaseConnector()
+        connected = db.test_connection()
+        
+        if connected:
+            # 获取统计信息
+            db.connect()
+            cursor = db.cursor
+            
+            # 获取任务映射数量
+            cursor.execute("SELECT COUNT(*) as total FROM task_mapping")
+            total_mappings = cursor.fetchone()['total']
+            
+            # 获取任务类型分布
+            cursor.execute("SELECT task_type, COUNT(*) as count FROM task_mapping GROUP BY task_type")
+            task_type_distribution = cursor.fetchall()
+            
+            # 获取最近更新时间
+            cursor.execute("SELECT MAX(updated_at) as last_updated FROM task_mapping")
+            last_updated = cursor.fetchone()['last_updated']
+            
+            db.disconnect()
+            
+            return jsonify({
+                'success': True,
+                'data': {
+                    'available': True,
+                    'connected': True,
+                    'statistics': {
+                        'total_mappings': total_mappings,
+                        'task_type_distribution': task_type_distribution,
+                        'last_updated': last_updated.isoformat() if last_updated else None
+                    }
+                }
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'available': True,
+                    'connected': False,
+                    'reason': '无法连接到数据库'
+                }
+            })
+        
+    except Exception as e:
+        logger.error(f"获取数据库状态失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/delete_task/<job_id>', methods=['DELETE'])
+def delete_task(job_id):
+    """删除任务（仅从数据库删除）"""
+    logger.info(f"📥 收到删除任务请求: job_id={job_id}")
+    try:
+        if not LOCAL_DB_AVAILABLE:
+            return jsonify({
+                'success': False,
+                'error': '本地数据库不可用'
+            }), 500
+        
+        db = LocalDatabaseConnector()
+        
+        # 首先获取任务信息
+        mapping = db.get_task_mapping_by_job_id(job_id)
+        if not mapping:
+            db.disconnect()
+            return jsonify({
+                'success': False,
+                'error': '任务记录不存在'
+            }), 404
+        
+        # 删除物理文件
+        full_path = mapping.get('full_path', '')
+        if full_path and os.path.exists(full_path):
+            try:
+                import shutil
+                shutil.rmtree(full_path)
+                logger.info(f"已删除文件目录: {full_path}")
+            except Exception as file_error:
+                logger.warning(f"删除文件目录失败: {str(file_error)}")
+        
+        # 删除数据库记录（由于外键约束，会自动删除相关的文件详情记录）
+        cursor = db.cursor
+        delete_query = "DELETE FROM task_mapping WHERE job_id = %s"
+        cursor.execute(delete_query, (job_id,))
+        db.connection.commit()
+        
+        deleted_rows = cursor.rowcount
+        db.disconnect()
+        
+        if deleted_rows > 0:
+            logger.info(f"成功删除任务记录: {job_id}")
+            return jsonify({
+                'success': True,
+                'message': f'任务 {job_id} 删除成功'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '删除失败，记录不存在'
+            }), 404
+        
+    except Exception as e:
+        logger.error(f"删除任务失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/task_detail/<job_id>', methods=['GET'])
+def get_task_detail(job_id):
+    """获取任务详情（仅从数据库获取）"""
+    logger.info(f"📥 收到获取任务详情请求: job_id={job_id}")
+    try:
+        if not LOCAL_DB_AVAILABLE:
+            return jsonify({
+                'success': False,
+                'error': '本地数据库不可用'
+            }), 500
+        
+        db = LocalDatabaseConnector()
+        mapping = db.get_task_mapping_by_job_id(job_id)
+        
+        if not mapping:
+            db.disconnect()
+            return jsonify({
+                'success': False,
+                'error': '任务记录不存在'
+            }), 404
+        
+        # 获取文件详情
+        file_details = db.get_file_details_by_mapping_id(mapping['id'])
+        mapping['files'] = file_details
+        mapping['source'] = 'database'
+        
+        db.disconnect()
+        
+        # 为每个文件添加内容预览
+        for file_info in mapping.get('files', []):
+            file_path = file_info.get('file_path', '')
+            if os.path.exists(file_path):
+                try:
+                    # 根据文件类型决定预览内容
+                    if file_info.get('file_name', '').endswith('.json'):
+                        # JSON文件，读取并格式化
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = json.load(f)
+                            file_info['preview'] = json.dumps(content, indent=2, ensure_ascii=False)[:1000]
+                            file_info['preview_type'] = 'json'
+                    elif file_info.get('file_name', '').endswith('.html'):
+                        # HTML文件，读取前500字符
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            file_info['preview'] = content[:500] + ('...' if len(content) > 500 else '')
+                            file_info['preview_type'] = 'html'
+                    else:
+                        # 其他文件，简单文本预览
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            file_info['preview'] = content[:300] + ('...' if len(content) > 300 else '')
+                            file_info['preview_type'] = 'text'
+                except Exception as preview_error:
+                    file_info['preview'] = f'预览失败: {str(preview_error)}'
+                    file_info['preview_type'] = 'error'
+            else:
+                file_info['preview'] = '文件不存在'
+                file_info['preview_type'] = 'error'
+        
+        return jsonify({
+            'success': True,
+            'data': mapping
+        })
+        
+    except Exception as e:
+        logger.error(f"获取任务详情失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 if __name__ == '__main__':
-    # 确保模板和静态文件目录存在
-    os.makedirs('templates', exist_ok=True)
+    # 确保静态文件目录存在
     os.makedirs('static', exist_ok=True)
     
-    print("🚀 任务检查工具看板启动中...")
-    print("📊 统一的任务管理和监控平台")
-    print("📋 访问地址: http://localhost:5001")
-    print("=" * 50)
+    logger.info("🚀 任务检查工具看板启动中...")
+    logger.info("📊 统一的任务管理和监控平台")
+    logger.info("📋 访问地址: http://localhost:5001")
+    logger.info("=" * 50)
+    
+    # 检查系统状态
+    logger.info("🔍 系统状态检查:")
+    logger.info(f"   📁 日志目录: {Path('logs').absolute()}")
+    logger.info(f"   🗄️  本地数据库: {'✅ 可用' if LOCAL_DB_AVAILABLE else '❌ 不可用'}")
+    
+    if LOCAL_DB_AVAILABLE:
+        try:
+            test_db = LocalDatabaseConnector()
+            if test_db.connect():
+                logger.info("   🔗 数据库连接: ✅ 测试成功")
+                test_db.disconnect()
+            else:
+                logger.warning("   🔗 数据库连接: ⚠️ 测试失败")
+        except Exception as e:
+            logger.warning(f"   🔗 数据库连接: ❌ 测试异常 - {str(e)}")
+    
+    logger.info("🎯 启动完成，开始监听请求...")
     
     app.run(debug=True, host='0.0.0.0', port=5001) 

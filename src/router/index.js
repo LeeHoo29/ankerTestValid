@@ -33,6 +33,15 @@ const routes = [
           title: '任务统计',
           icon: 'DataAnalysis'
         }
+      },
+      {
+        path: 'database',
+        name: 'DatabaseManager',
+        component: () => import('@/views/DatabaseManager.vue'),
+        meta: { 
+          title: '数据库管理',
+          icon: 'Connection'
+        }
       }
     ]
   }

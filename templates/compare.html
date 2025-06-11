@@ -1232,6 +1232,38 @@
             const content = data.content;
             const fileSize = new Blob([content]).size;
             
+            // 检测是否为空JSON数据
+            if (data.is_empty_json) {
+                const emptyMessages = {
+                    'empty_string': '📝 JSON文件包含空字符串',
+                    'empty_object': '📦 JSON文件包含空对象 {}',
+                    'empty_array': '📊 JSON文件包含空数组 []',
+                    'null': '⭕ JSON文件包含null值'
+                };
+                
+                const message = emptyMessages[data.empty_json_type] || '📄 JSON文件无有效数据';
+                
+                jsonContent.innerHTML = `
+                    <div class="json-viewer">
+                        <div class="json-toolbar">
+                            <div class="json-stats">文件类型: JSON | 大小: ${formatFileSize(fileSize)}</div>
+                            <div class="json-path">📄 ${data.filename || 'JSON文件'}</div>
+                        </div>
+                        <div class="json-empty-state">
+                            <div class="empty-icon">📄</div>
+                            <div class="empty-title">${message}</div>
+                            <div class="empty-subtitle">此JSON文件不包含可显示的数据内容</div>
+                            <div class="empty-actions">
+                                <button class="empty-btn" onclick="location.reload()">
+                                    <i class="fas fa-refresh"></i> 刷新
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
             if (startTime > 0) {
                 // 显示处理状态 (非缓存)
                 jsonContent.innerHTML = `
